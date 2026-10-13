@@ -26,7 +26,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
@@ -283,7 +286,7 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
                 Text("${state.mood.label} mood · AI companion", fontSize = 12.sp, color = Color.Gray)
             }
             IconButton(onClick = { vm.clearConversation(); tts.stop() }) {
-                Icon(Icons.Default.DeleteOutline, "Clear this conversation")
+                Icon(Icons.Default.Delete, "Clear this conversation")
             }
         }
         LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
@@ -301,7 +304,7 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
                             Text(message.text, modifier = Modifier.padding(16.dp), color = if (message.fromUser) Color.White else Ink, fontSize = 15.sp)
                         }
                         if (!message.fromUser) TextButton(onClick = { if (speechEnabled) { tts.language = Locale.getDefault(); tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, "letitout-ai") } }) {
-                            Icon(Icons.Default.VolumeUp, "Speak response", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Listen", fontSize = 12.sp)
+                            Icon(Icons.Default.PlayArrow, "Speak response", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Listen", fontSize = 12.sp)
                         }
                     }
                 }
@@ -328,7 +331,7 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
                             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
                         })
                     } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                }) { Icon(if (isListening) Icons.Default.Stop else Icons.Default.Mic, "Speak") }
+                }) { Icon(painterResource(if (isListening) R.drawable.ic_stop else R.drawable.ic_mic), "Speak") }
                 OutlinedTextField(
                     value = input, onValueChange = { input = it },
                     modifier = Modifier.weight(1f),

@@ -2,7 +2,7 @@
 
 **A colourful, mood-aware Android AI listening companion (v0.1.0 developer starter).**
 
-> **Status: source-code scaffold, not a verified runnable release.** External dependencies could not be downloaded or built in the creation environment. Google Sign-In, real AI replies, and voice recognition need local Android/Firebase/network setup and real-device testing. This is **not** ready for real users or public distribution.
+> **Status: developer starter, not a release.** The Android debug build and backend unit tests passed locally on 13 October 2026. The app launched on an emulator, including its preview mood and chat screens. Google Sign-In, real AI replies, and voice recognition still need Firebase/network setup and real-device testing. This is **not** ready for real users or public distribution.
 
 **Android application ID:** `com.letitout.app`
 **Display name:** `LET IT OUT`
@@ -24,15 +24,12 @@ Open this **root folder** in Android Studio. Use JDK 17 for the Android build; t
 
 Versions are deliberately conservative for interoperability: AGP `8.11.1`, Kotlin `2.2.21`, Gradle `8.13`, Compose BOM `2025.06.01`. Upgrade only after a successful local build, not all at once.
 
-**Important:** This ZIP contains `gradle-wrapper.properties` but no `gradle-wrapper.jar` or `gradlew` scripts; the environment had no Gradle installation or internet to generate them. Create them using a local Gradle installation:
-
 ```bash
 cd LET-IT-OUT
-gradle wrapper --gradle-version 8.13
 ./gradlew :app:assembleDebug
 ```
 
-If Gradle is not installed, install it first or use Android Studio's Gradle configuration to generate a wrapper. Do not commit `local.properties` or API keys.
+The Gradle 8.13 wrapper is included. Do not commit `local.properties` or API keys.
 
 For an emulator, create `local.properties`:
 
@@ -58,7 +55,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/service-account.json"
 export FIREBASE_PROJECT_ID="YOUR_PROJECT_ID"
 export GROQ_API_KEY="YOUR_GROQ_KEY"
 export GROQ_MODEL="openai/gpt-oss-120b"
-gradle run
+../gradlew run
 ```
 
 Check `http://localhost:8080/health`. The `/v1/chat` endpoint returns 503 when Firebase admin or Groq is unconfigured. Never place `GROQ_API_KEY` in the Android application.
@@ -84,7 +81,7 @@ Response:
 
 ## 5. Existing limitations
 
-- **Not compiled in this environment** (no Android SDK, Gradle distribution, or remote dependency access). Resolve compile issues locally before treating as working.
+- The debug build and emulator preview were verified locally, but real sign-in, AI replies, voice recognition, and physical-device behavior remain unverified.
 - Account deletion may require recent Firebase reauthentication. For a production service, implement complete user-data erasure wherever data is retained.
 - Guest-to-Google account upgrade is implemented using Firebase credential linking; it needs collision-handling tests.
 - Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
