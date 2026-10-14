@@ -10,11 +10,11 @@
 
 ## What has been implemented in source
 
-- Native Jetpack Compose welcome screen, Google/guest/preview entry, seven-mood home screen, AI chat view, settings and privacy/help screen, with Android Back navigation.
-- Consistent warm Material 3 theme, custom line icons for moods, and muted mood colours, with selection persisted through DataStore.
+- Native Jetpack Compose splash, three-page onboarding, Google/guest/preview sign-in, seven-mood home screen, mood check-in with an optional intensity rating, AI chat view, settings and Privacy & Help screen, with Android Back navigation.
+- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, speech and theme settings persist through DataStore.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in integration points (requires your own Firebase project).
 - Ktor backend exposing `/health` and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, limiting input and per-user traffic.
-- Text conversation states (loading/errors/retry/clear), native Android push-to-talk transcript capture and optional text-to-speech playback.
+- Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
 - An intentionally limited **prototype-only** crisis keyword guard plus configurable support resources. **Not a clinically validated or sufficient production safety system.**
 - No AdMob, analytics trackers, WebRTC, background microphone, or large downloadable AI models.
 

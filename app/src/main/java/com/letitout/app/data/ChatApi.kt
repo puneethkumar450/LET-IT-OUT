@@ -30,7 +30,7 @@ interface ChatApi {
 
 @Singleton
 class ChatRepository @Inject constructor(private val api: ChatApi, @ApplicationContext private val context: Context) {
-    suspend fun reply(mood: Mood, conversation: List<ChatMessage>): String {
+    suspend fun reply(mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null): ChatResponse {
         if (FirebaseApp.getApps(context).isEmpty()) {
             throw IllegalStateException("Firebase setup is required before AI chat can connect.")
         }
@@ -42,8 +42,8 @@ class ChatRepository @Inject constructor(private val api: ChatApi, @ApplicationC
             "Bearer $idToken",
             ChatRequest(mood.name, conversation.takeLast(12).map {
                 ApiMessage(if (it.fromUser) "user" else "assistant", it.text)
-            })
-        ).reply
+            }, intensity)
+        )
     }
 }
 

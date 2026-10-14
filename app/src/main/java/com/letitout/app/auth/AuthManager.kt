@@ -21,7 +21,9 @@ import javax.inject.Singleton
 class AuthManager @Inject constructor(@ApplicationContext private val context: Context) {
     fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
     fun isSignedIn(): Boolean = isConfigured() && FirebaseAuth.getInstance().currentUser != null
+    fun isGuest(): Boolean = isSignedIn() && FirebaseAuth.getInstance().currentUser?.isAnonymous == true
     fun userName(): String? = if (isConfigured()) FirebaseAuth.getInstance().currentUser?.displayName else null
+    fun userEmail(): String? = if (isConfigured()) FirebaseAuth.getInstance().currentUser?.email else null
 
     suspend fun signInGuest() {
         check(isConfigured()) { "Add Firebase configuration to enable guest sign-in." }

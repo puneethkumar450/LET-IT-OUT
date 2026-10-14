@@ -26,7 +26,7 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 @Serializable data class Message(val role: String, val content: String)
-@Serializable data class ChatRequest(val mood: String, val messages: List<Message>)
+@Serializable data class ChatRequest(val mood: String, val messages: List<Message>, val intensity: Int? = null)
 @Serializable data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
 @Serializable data class ErrorResponse(val error: String)
 
@@ -88,7 +88,8 @@ private suspend fun groqReply(req: ChatRequest): String = withContext(Dispatcher
     val apiKey = requireNotNull(System.getenv("GROQ_API_KEY"))
     val model = System.getenv("GROQ_MODEL") ?: "openai/gpt-oss-120b"
     val recent = req.messages.takeLast(12)
-    val fullPrompt = "$prompt\nUser-selected mood: ${req.mood}. Do not assume mood is clinically accurate."
+    val intensityNote = req.intensity?.takeIf { it in 1..10 }?.let { " Self-rated intensity: $it/10." } ?: ""
+    val fullPrompt = "$prompt\nUser-selected mood: ${req.mood}.$intensityNote Do not assume mood is clinically accurate."
     val body = buildJsonObject {
         put("model", model)
         put("temperature", 0.5)
