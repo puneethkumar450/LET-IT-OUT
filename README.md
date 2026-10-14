@@ -1,8 +1,8 @@
-# LET IT OUT 💙
+# LET IT OUT
 
-**A colourful, mood-aware Android AI listening companion (v0.1.0 developer starter).**
+**A mood-aware Android AI listening companion (v0.1.0 developer starter).**
 
-> **Status: developer starter, not a release.** The Android debug build and backend unit tests passed locally on 13 October 2026. The app launched on an emulator, including its preview mood and chat screens. Google Sign-In, real AI replies, and voice recognition still need Firebase/network setup and real-device testing. This is **not** ready for real users or public distribution.
+> **Status: developer starter, not a release.** The Android debug build and backend unit tests passed locally. On 14 October 2026, the redesigned app launched on an emulator and its preview screens and Android Back navigation were checked. Google Sign-In, real AI replies, and voice recognition still need Firebase/network setup and real-device testing. This is **not** ready for real users or public distribution.
 
 **Android application ID:** `com.letitout.app`
 **Display name:** `LET IT OUT`
@@ -10,8 +10,8 @@
 
 ## What has been implemented in source
 
-- Native Jetpack Compose welcome screen, Google/guest/preview entry, colourful seven-mood home screen, AI chat view, settings and privacy/help screen.
-- Material 3 mood-reactive colour palettes, with selection persisted through DataStore.
+- Native Jetpack Compose welcome screen, Google/guest/preview entry, seven-mood home screen, AI chat view, settings and privacy/help screen, with Android Back navigation.
+- Consistent warm Material 3 theme, custom line icons for moods, and muted mood colours, with selection persisted through DataStore.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in integration points (requires your own Firebase project).
 - Ktor backend exposing `/health` and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, limiting input and per-user traffic.
 - Text conversation states (loading/errors/retry/clear), native Android push-to-talk transcript capture and optional text-to-speech playback.
@@ -43,7 +43,7 @@ webClientId=YOUR_FIREBASE_WEB_OAUTH_CLIENT_ID.apps.googleusercontent.com
 
 ## 2. Configure Google and guest sign-in
 
-Follow [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md). Until configured, **Explore the app (preview only)** is available, but actual AI messages will not be sent. Authentication is required for `/v1/chat` to avoid open, unbounded API spending.
+Follow [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md). Until configured, **Explore in preview** is available. You can view and draft in chat, but sending is disabled. Authentication is required for `/v1/chat` to avoid open, unbounded API spending.
 
 ## 3. Start backend
 

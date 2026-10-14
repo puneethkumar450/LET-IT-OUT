@@ -12,8 +12,8 @@ import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,18 +25,26 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,7 +56,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.data.Mood
 import com.letitout.app.data.palette
+import com.letitout.app.ui.AppColors
 import com.letitout.app.ui.AppViewModel
+import com.letitout.app.ui.BrandMark
+import com.letitout.app.ui.MoodSymbol
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -61,36 +72,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val Ink = Color(0xFF29263E)
-private val Lavender = Color(0xFF7866CF)
-
 @Composable
 private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    var page by rememberSaveable { mutableStateOf("welcome") }
-    val palette = state.mood.palette()
-    val background by animateColorAsState(palette.background, label = "Mood background")
-    val dynamicScheme = lightColorScheme(
-        primary = palette.primary,
-        secondary = palette.accent,
-        background = background,
-        surface = Color.White,
+    var backStack by rememberSaveable { mutableStateOf(listOf("welcome")) }
+    val page = backStack.last()
+    val navigateTo: (String) -> Unit = { destination -> backStack = backStack + destination }
+    val enterHome: () -> Unit = { backStack = listOf("home") }
+    val navigateBack: () -> Unit = {
+        if (backStack.size > 1) backStack = backStack.dropLast(1)
+    }
+    BackHandler(enabled = backStack.size > 1, onBack = navigateBack)
+    val scheme = lightColorScheme(
+        primary = AppColors.Primary,
+        secondary = Color(0xFF8DAF9C),
+        secondaryContainer = AppColors.PrimarySoft,
+        onSecondaryContainer = AppColors.Primary,
+        background = AppColors.Canvas,
+        surface = AppColors.Card,
+        surfaceVariant = AppColors.PrimarySoft,
+        onSurfaceVariant = AppColors.Muted,
         onPrimary = Color.White,
-        onSurface = Ink,
-        onBackground = Ink
+        onSurface = AppColors.Ink,
+        onBackground = AppColors.Ink,
+        outline = AppColors.Line,
+        error = AppColors.Error
     )
-    MaterialTheme(colorScheme = dynamicScheme) {
-        Surface(color = background, modifier = Modifier.fillMaxSize()) {
+    MaterialTheme(colorScheme = scheme) {
+        Surface(color = AppColors.Canvas, modifier = Modifier.fillMaxSize()) {
             when (page) {
-                "welcome" -> WelcomePage { page = "auth" }
-                "auth" -> AuthPage(vm, onContinue = { page = "home" })
+                "welcome" -> WelcomePage { navigateTo("auth") }
+                "auth" -> AuthPage(vm, onBack = navigateBack, onContinue = enterHome)
                 "home" -> HomePage(
-                    onChoose = { mood -> vm.chooseMood(mood); page = "chat" },
-                    onSettings = { page = "settings" }
+                    onChoose = { mood -> vm.chooseMood(mood); navigateTo("chat") },
+                    onSettings = { navigateTo("settings") }
                 )
-                "chat" -> ChatPage(vm, onBack = { page = "home" })
-                "settings" -> SettingsPage(vm, onBack = { page = "home" }, onPrivacy = { page = "privacy" }, onAuth = { page = "auth" })
-                "privacy" -> PrivacyPage { page = "settings" }
+                "chat" -> ChatPage(vm, onBack = navigateBack)
+                "settings" -> SettingsPage(vm, onBack = navigateBack, onPrivacy = { navigateTo("privacy") }, onAuth = { navigateTo("auth") })
+                "privacy" -> PrivacyPage(onBack = navigateBack)
             }
         }
     }
@@ -99,54 +117,72 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
 @Composable
 private fun WelcomePage(onStart: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(26.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-        horizontalAlignment = Alignment.CenterHorizontally
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 24.dp)
     ) {
-        Spacer(Modifier.height(40.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                Modifier.size(142.dp).background(
-                    Brush.linearGradient(listOf(Color(0xFFDCCFFF), Color(0xFFA9E9DB))),
-                    RoundedCornerShape(42.dp)
-                ), contentAlignment = Alignment.Center
-            ) { Text("💙", fontSize = 78.sp) }
-            Spacer(Modifier.height(30.dp))
-            Text("LET IT OUT", fontSize = 34.sp, fontWeight = FontWeight.Black, color = Ink)
-            Spacer(Modifier.height(12.dp))
-            Text("Your feelings matter.\nWe're here to listen.", color = Color(0xFF6D6687), fontSize = 20.sp, textAlign = TextAlign.Center, lineHeight = 28.sp)
-            Spacer(Modifier.height(46.dp))
-            listOf("🎙️   Talk freely, at your own pace", "🫶   Feel heard without judgment", "🌿   Take small steps toward calm").forEach { label ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                ) { Text(label, modifier = Modifier.padding(18.dp), fontSize = 15.sp, color = Ink) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BrandMark(size = 42.dp)
+            Spacer(Modifier.width(12.dp))
+            Text("LET IT OUT", color = AppColors.Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 2.sp)
+        }
+        Spacer(Modifier.height(54.dp))
+        Text("A little room\nto be yourself.", color = AppColors.Ink, fontSize = 42.sp, lineHeight = 47.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(14.dp))
+        Text("Whatever today feels like, you can start here.", color = AppColors.Muted, fontSize = 17.sp, lineHeight = 24.sp)
+        Spacer(Modifier.height(34.dp))
+        Surface(
+            color = AppColors.PrimarySoft,
+            shape = RoundedCornerShape(30.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                Box(Modifier.size(68.dp).background(AppColors.Card, RoundedCornerShape(22.dp)), contentAlignment = Alignment.Center) {
+                    MoodSymbol(Mood.TALK, Modifier.size(38.dp), AppColors.Primary)
+                }
+                Spacer(Modifier.height(28.dp))
+                Text("No perfect words needed.", color = AppColors.Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("Talk about what's on your mind, or simply explore the space.", color = AppColors.Muted, fontSize = 14.sp, lineHeight = 21.sp)
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(19.dp)) {
-                Text("Get started", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(30.dp))
+        listOf(
+            "A place to check in with yourself",
+            "Listen or write, at your own pace",
+            "Explore first, sign in when ready"
+        ).forEach { line ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(7.dp).background(AppColors.Primary, CircleShape))
+                Spacer(Modifier.width(13.dp))
+                Text(line, color = AppColors.Ink, fontSize = 14.sp)
             }
-            Spacer(Modifier.height(10.dp))
-            Text("AI listening companion · 18+ · Not emergency care", color = Color(0xFF777189), fontSize = 11.sp)
         }
+        Spacer(Modifier.height(32.dp))
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(19.dp)) {
+            Text("Get started", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
+        }
+        Spacer(Modifier.height(15.dp))
+        Text("For adults 18+ · Not emergency care", modifier = Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
-private fun AuthPage(vm: AppViewModel, onContinue: () -> Unit) {
+private fun AuthPage(vm: AppViewModel, onBack: () -> Unit, onContinue: () -> Unit) {
     val activity = LocalContext.current as Activity
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("🫶", fontSize = 68.sp)
-        Spacer(Modifier.height(20.dp))
-        Text("A little space for you", fontSize = 28.sp, color = Ink, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Text("You can explore first. Sign in to start AI conversations.", color = Color.Gray, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(34.dp))
+    val configured = vm.auth.isConfigured()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 24.dp)) {
+        PageBackButton(onBack)
+        Spacer(Modifier.height(43.dp))
+        BrandMark(size = 76.dp)
+        Spacer(Modifier.height(27.dp))
+        Text("Come as you are.", fontSize = 36.sp, lineHeight = 41.sp, color = AppColors.Ink, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Text("Choose how you'd like to enter your space. You can always explore before signing in.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 23.sp)
+        Spacer(Modifier.height(36.dp))
         Button(
             onClick = {
                 scope.launch {
@@ -155,8 +191,8 @@ private fun AuthPage(vm: AppViewModel, onContinue: () -> Unit) {
                     catch (t: Exception) { error = t.message ?: "Google sign-in didn't complete" }
                     finally { working = false }
                 }
-            }, enabled = !working, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp)
-        ) { Text("Continue with Google") }
+            }, enabled = !working && configured, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)
+        ) { Icon(Icons.Default.AccountCircle, null); Spacer(Modifier.width(10.dp)); Text("Continue with Google", fontWeight = FontWeight.SemiBold) }
         Spacer(Modifier.height(12.dp))
         OutlinedButton(
             onClick = {
@@ -166,66 +202,103 @@ private fun AuthPage(vm: AppViewModel, onContinue: () -> Unit) {
                     catch (t: Exception) { error = t.message ?: "Guest sign-in failed" }
                     finally { working = false }
                 }
-            }, enabled = !working, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp)
-        ) { Text("Continue as guest") }
-        TextButton(onClick = onContinue, enabled = !working) { Text("Explore the app (preview only)") }
-        if (working) CircularProgressIndicator(Modifier.padding(16.dp))
-        if (!vm.auth.isConfigured()) Text("Firebase not configured. Preview works; AI requires setup.", color = Color(0xFF9C5826), textAlign = TextAlign.Center, fontSize = 12.sp)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, fontSize = 13.sp) }
-        Spacer(Modifier.height(28.dp))
-        Text("AI can make mistakes. Not a replacement for professional care.", textAlign = TextAlign.Center, fontSize = 11.sp, color = Color.Gray)
+            }, enabled = !working && configured, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)
+        ) { Text("Continue as guest", fontWeight = FontWeight.SemiBold) }
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(onClick = onContinue, enabled = !working, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) {
+            Text("Explore in preview", fontWeight = FontWeight.SemiBold)
+        }
+        if (working) { Spacer(Modifier.height(20.dp)); CircularProgressIndicator() }
+        if (!configured) {
+            Spacer(Modifier.height(25.dp))
+            Surface(color = AppColors.Warm, shape = RoundedCornerShape(20.dp)) {
+                Row(Modifier.fillMaxWidth().padding(17.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Default.Info, null, tint = AppColors.Error, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Sign-in is unavailable until Firebase is configured. Preview mode is ready to explore.", color = AppColors.Ink, fontSize = 13.sp, lineHeight = 19.sp)
+                }
+            }
+        }
+        error?.let { Spacer(Modifier.height(14.dp)); Text(it, color = AppColors.Error, fontSize = 13.sp) }
+        Spacer(Modifier.height(31.dp))
+        Text("AI can make mistakes and is not a replacement for professional care.", fontSize = 12.sp, lineHeight = 18.sp, color = AppColors.Muted)
     }
 }
 
 @Composable
 private fun HomePage(onChoose: (Mood) -> Unit, onSettings: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 23.dp)) {
-        Spacer(Modifier.height(24.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.weight(1f)) {
-                Text("LET IT OUT", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Lavender)
-                Text("Hello there 💙", fontSize = 31.sp, fontWeight = FontWeight.Bold, color = Ink)
-            }
-            IconButton(onClick = onSettings, modifier = Modifier.background(Color.White, CircleShape)) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Ink)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BrandMark(size = 44.dp)
+            Spacer(Modifier.width(11.dp))
+            Text("LET IT OUT", modifier = Modifier.weight(1f), color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+            IconButton(onClick = onSettings, modifier = Modifier.background(AppColors.Card, CircleShape)) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = AppColors.Primary)
             }
         }
-        Spacer(Modifier.height(29.dp))
-        Text("How are you feeling today?", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
-        Spacer(Modifier.height(7.dp))
-        Text("Every feeling deserves a little space.", fontSize = 15.sp, color = Color(0xFF766F88))
-        Spacer(Modifier.height(26.dp))
-        Mood.entries.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+        Spacer(Modifier.height(39.dp))
+        Text("How are you\nfeeling today?", fontSize = 36.sp, lineHeight = 41.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
+        Spacer(Modifier.height(11.dp))
+        Text("Choose what feels closest. You can change your mind anytime.", color = AppColors.Muted, fontSize = 15.sp, lineHeight = 22.sp)
+        Spacer(Modifier.height(34.dp))
+        Text("CHECK IN", color = AppColors.Primary, fontSize = 11.sp, letterSpacing = 1.9.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        Mood.entries.dropLast(1).chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { mood ->
-                    Card(
-                        onClick = { onChoose(mood) },
-                        modifier = Modifier.weight(1f).height(143.dp),
-                        colors = CardDefaults.cardColors(containerColor = mood.palette().background),
-                        shape = RoundedCornerShape(27.dp),
-                        border = BorderStroke(1.dp, mood.palette().accent)
-                    ) {
-                        Column(Modifier.fillMaxSize().padding(19.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                            Text(mood.icon, fontSize = 36.sp)
-                            Text(mood.label, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink)
-                        }
-                    }
+                    MoodCard(mood, modifier = Modifier.weight(1f).height(157.dp), onClick = { onChoose(mood) })
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(24.dp)) {
-            Row(Modifier.fillMaxWidth().padding(19.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("🌿", fontSize = 30.sp)
+        MoodCard(Mood.TALK, modifier = Modifier.fillMaxWidth().height(104.dp), wide = true, onClick = { onChoose(Mood.TALK) })
+        Spacer(Modifier.height(24.dp))
+        Surface(color = AppColors.PrimarySoft, shape = RoundedCornerShape(24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                MoodSymbol(Mood.TALK, Modifier.size(29.dp), AppColors.Primary)
                 Spacer(Modifier.width(16.dp))
                 Column {
-                    Text("Your pace. Your space.", fontWeight = FontWeight.Bold, color = Ink)
-                    Text("You don't have to have it all figured out.", color = Color.Gray, fontSize = 12.sp)
+                    Text("Your pace. Your space.", color = AppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("No need to have it all figured out.", color = AppColors.Muted, fontSize = 12.sp)
                 }
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun MoodCard(mood: Mood, modifier: Modifier, wide: Boolean = false, onClick: () -> Unit) {
+    val palette = mood.palette()
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = AppColors.Card),
+        shape = RoundedCornerShape(23.dp),
+        border = BorderStroke(1.dp, AppColors.Line)
+    ) {
+        if (wide) {
+            Row(Modifier.fillMaxSize().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(60.dp).background(palette.background, RoundedCornerShape(19.dp)), contentAlignment = Alignment.Center) {
+                    MoodSymbol(mood, Modifier.size(31.dp), palette.primary)
+                }
+                Spacer(Modifier.width(17.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(mood.label, color = AppColors.Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(mood.detail, color = AppColors.Muted, fontSize = 12.sp)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.Muted)
+            }
+        } else {
+            Column(Modifier.fillMaxSize().padding(17.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Box(Modifier.size(57.dp).background(palette.background, RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+                    MoodSymbol(mood, Modifier.size(32.dp), palette.primary)
+                }
+                Column {
+                    Text(mood.label, color = AppColors.Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(mood.detail, color = AppColors.Muted, fontSize = 11.sp, maxLines = 1)
+                }
+            }
+        }
     }
 }
 
@@ -233,10 +306,10 @@ private fun HomePage(onChoose: (Mood) -> Unit, onSettings: () -> Unit) {
 private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = context as Activity
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
     var speechError by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
     var speechEnabled by remember { mutableStateOf(false) }
@@ -271,37 +344,83 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
             })
         }
     }
+    val submitMessage: () -> Unit = {
+        if (state.signedIn && input.isNotBlank() && !state.loading) {
+            vm.send(input)
+            input = ""
+            focusManager.clearFocus()
+            keyboard?.hide()
+        }
+    }
     LaunchedEffect(state.messages.size, state.loading) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size + if (state.loading) 1 else 0)
     }
+    val palette = state.mood.palette()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 12.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { tts.stop(); onBack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Text(state.mood.icon, fontSize = 26.sp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Let's talk", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Ink)
-                Text("${state.mood.label} mood · AI companion", fontSize = 12.sp, color = Color.Gray)
-            }
-            IconButton(onClick = { vm.clearConversation(); tts.stop() }) {
-                Icon(Icons.Default.Delete, "Clear this conversation")
+        Surface(color = AppColors.Card) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                PageBackButton(onClick = onBack)
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.size(42.dp).background(palette.background, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    MoodSymbol(state.mood, Modifier.size(25.dp), palette.primary)
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("${state.mood.label} space", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
+                    Text("Take your time", fontSize = 12.sp, color = AppColors.Muted)
+                }
+                IconButton(onClick = { vm.clearConversation(); tts.stop() }, modifier = Modifier.background(AppColors.PrimarySoft, CircleShape)) {
+                    Icon(Icons.Default.Delete, "Clear this conversation", tint = AppColors.Primary, modifier = Modifier.size(20.dp))
+                }
             }
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth().background(palette.background.copy(alpha = .55f)),
+            contentPadding = PaddingValues(horizontal = 17.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(15.dp)
+        ) {
             item {
-                Text("💙  ${state.mood.prompt}", modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(22.dp)).padding(19.dp), color = Ink, fontSize = 16.sp)
+                Surface(color = AppColors.Card, shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, AppColors.Line)) {
+                    Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.Top) {
+                        MoodSymbol(state.mood, Modifier.size(24.dp), palette.primary)
+                        Spacer(Modifier.width(13.dp))
+                        Text(state.mood.prompt, color = AppColors.Ink, fontSize = 16.sp, lineHeight = 23.sp)
+                    }
+                }
+            }
+            if (state.messages.isEmpty()) item {
+                Column(Modifier.fillMaxWidth().padding(top = 19.dp)) {
+                    Text("A STARTING POINT", color = palette.primary, fontSize = 11.sp, letterSpacing = 1.7.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(7.dp))
+                    Text("It's okay if you don't know what to say yet.", color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp)
+                    Spacer(Modifier.height(16.dp))
+                    listOf("I want to talk about today", "I'm not sure where to start").forEach { suggestion ->
+                        Surface(
+                            onClick = { input = suggestion },
+                            color = AppColors.Card,
+                            shape = RoundedCornerShape(17.dp),
+                            border = BorderStroke(1.dp, AppColors.Line),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 9.dp)
+                        ) {
+                            Row(Modifier.padding(horizontal = 17.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(suggestion, color = AppColors.Ink, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.Muted, modifier = Modifier.size(19.dp))
+                            }
+                        }
+                    }
+                }
             }
             items(state.messages, key = { it.id }) { message ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start) {
                     Column(horizontalAlignment = if (message.fromUser) Alignment.End else Alignment.Start) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = if (message.fromUser) MaterialTheme.colorScheme.primary else Color.White,
+                            color = if (message.fromUser) AppColors.Primary else AppColors.Card,
+                            border = if (message.fromUser) null else BorderStroke(1.dp, AppColors.Line),
                             modifier = Modifier.widthIn(max = 300.dp)
                         ) {
-                            Text(message.text, modifier = Modifier.padding(16.dp), color = if (message.fromUser) Color.White else Ink, fontSize = 15.sp)
+                            Text(message.text, modifier = Modifier.padding(horizontal = 17.dp, vertical = 14.dp), color = if (message.fromUser) Color.White else AppColors.Ink, fontSize = 15.sp, lineHeight = 21.sp)
                         }
                         if (!message.fromUser) TextButton(onClick = { if (speechEnabled) { tts.language = Locale.getDefault(); tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, "letitout-ai") } }) {
                             Icon(Icons.Default.PlayArrow, "Speak response", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Listen", fontSize = 12.sp)
@@ -309,20 +428,35 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
                     }
                 }
             }
-            if (state.loading) item { Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Listening and thinking…", color = Color.Gray) } }
+            if (state.loading) item {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Listening and thinking…", color = AppColors.Muted, fontSize = 13.sp)
+                }
+            }
         }
         state.error?.let { error ->
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E9)), modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(error, color = Color(0xFF7D452E), fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Surface(color = AppColors.Warm, shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(error, color = AppColors.Error, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
                     TextButton(onClick = vm::retry) { Text("Retry") }
                 }
             }
         }
-        speechError?.let { Text(it, modifier = Modifier.padding(10.dp), color = Color(0xFF984D3D), fontSize = 12.sp) }
-        Surface(color = Color.White, shadowElevation = 8.dp) {
-            Row(Modifier.fillMaxWidth().imePadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = {
+        speechError?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = AppColors.Error, fontSize = 12.sp) }
+        if (!state.signedIn) {
+            Surface(color = AppColors.PrimarySoft, shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Preview mode · You can explore this space. Sending messages requires sign-in.", color = AppColors.Ink, fontSize = 12.sp, lineHeight = 18.sp)
+                }
+            }
+        }
+        Surface(color = AppColors.Card, shadowElevation = 4.dp) {
+            Row(Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(enabled = state.signedIn, onClick = {
                     if (isListening) { recognizer?.stopListening(); isListening = false }
                     else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                         if (recognizer == null) speechError = "Speech recognition is unavailable on this device."
@@ -331,18 +465,24 @@ private fun ChatPage(vm: AppViewModel, onBack: () -> Unit) {
                             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
                         })
                     } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                }) { Icon(painterResource(if (isListening) R.drawable.ic_stop else R.drawable.ic_mic), "Speak") }
+                }, modifier = Modifier.size(46.dp).background(AppColors.PrimarySoft, CircleShape)) {
+                    Icon(painterResource(if (isListening) R.drawable.ic_stop else R.drawable.ic_mic), "Speak", tint = if (state.signedIn) AppColors.Primary else AppColors.Muted, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(8.dp))
                 OutlinedTextField(
                     value = input, onValueChange = { input = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("What's on your mind?") },
-                    maxLines = 4, shape = RoundedCornerShape(22.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) { vm.send(input); input = "" } })
+                    maxLines = 4, shape = RoundedCornerShape(20.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = if (state.signedIn) ImeAction.Send else ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onSend = { submitMessage() },
+                        onDone = { focusManager.clearFocus(); keyboard?.hide() }
+                    )
                 )
-                Spacer(Modifier.width(6.dp))
-                IconButton(onClick = { vm.send(input); input = "" }, enabled = input.isNotBlank() && !state.loading) {
-                    Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(onClick = submitMessage, enabled = state.signedIn && input.isNotBlank() && !state.loading, modifier = Modifier.size(46.dp), shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Send, "Send", modifier = Modifier.size(21.dp))
                 }
             }
         }
@@ -354,25 +494,51 @@ private fun SettingsPage(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> 
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
-        TextButton(onClick = onBack) { Text("← Back") }
-        Spacer(Modifier.height(16.dp))
-        Text("Your space ⚙️", fontSize = 29.sp, fontWeight = FontWeight.Bold, color = Ink)
-        Spacer(Modifier.height(20.dp))
-        Text("Account", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Text(if (vm.auth.isSignedIn()) "Signed in" else "Preview mode", color = Color.Gray)
-        Spacer(Modifier.height(20.dp))
-        OutlinedButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) { Text("Privacy, help & support") }
-        OutlinedButton(onClick = {
-            scope.launch {
-                try { vm.auth.signOut(); vm.refreshAuth(); onAuth() }
-                catch (t: Exception) { status = t.message ?: "Sign-out problem" }
+    val signedIn = vm.auth.isSignedIn()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp)) {
+        PageBackButton(onBack)
+        Spacer(Modifier.height(34.dp))
+        Text("YOUR SPACE", color = AppColors.Primary, fontSize = 11.sp, letterSpacing = 1.9.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(9.dp))
+        Text("Settings", fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
+        Spacer(Modifier.height(9.dp))
+        Text("Keep your space comfortable and in your control.", color = AppColors.Muted, fontSize = 15.sp, lineHeight = 22.sp)
+        Spacer(Modifier.height(30.dp))
+        Surface(color = AppColors.Card, shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, AppColors.Line)) {
+            Row(Modifier.fillMaxWidth().padding(19.dp), verticalAlignment = Alignment.CenterVertically) {
+                BrandMark(size = 52.dp)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(if (signedIn) vm.auth.userName() ?: "Your account" else "Exploring in preview", color = AppColors.Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(3.dp))
+                    Text(if (signedIn) "Signed in" else "No account connected", color = AppColors.Muted, fontSize = 13.sp)
+                }
             }
-        }, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
-        OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete my account") }
-        if (status.isNotBlank()) Text(status, color = MaterialTheme.colorScheme.error)
-        Spacer(Modifier.height(28.dp))
-        Text("LET IT OUT · v0.1.0 preview", color = Color.Gray, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(33.dp))
+        Text("ACCOUNT & PRIVACY", color = AppColors.Primary, fontSize = 11.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(13.dp))
+        SettingsItem(Icons.Default.Lock, "Privacy and support", "How this space works", onClick = onPrivacy)
+        Spacer(Modifier.height(11.dp))
+        if (signedIn) {
+            SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", "Return to sign-in options", onClick = {
+                scope.launch {
+                    try { vm.auth.signOut(); vm.refreshAuth(); onAuth() }
+                    catch (t: Exception) { status = t.message ?: "Sign-out problem" }
+                }
+            })
+            Spacer(Modifier.height(11.dp))
+            SettingsItem(Icons.Default.Delete, "Delete my account", "Remove your sign-in account", destructive = true, onClick = { confirmDelete = true })
+        } else {
+            SettingsItem(Icons.Default.AccountCircle, "Sign in or join as guest", "Enable conversations when configured", onClick = onAuth)
+            Spacer(Modifier.height(20.dp))
+            Surface(color = AppColors.PrimarySoft, shape = RoundedCornerShape(20.dp)) {
+                Text("Preview mode lets you explore the app. There is no account to sign out of or delete.", modifier = Modifier.fillMaxWidth().padding(17.dp), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp)
+            }
+        }
+        if (status.isNotBlank()) { Spacer(Modifier.height(15.dp)); Text(status, color = AppColors.Error, fontSize = 13.sp) }
+        Spacer(Modifier.height(41.dp))
+        Text("LET IT OUT  ·  VERSION 0.1.0 PREVIEW", color = AppColors.Muted, fontSize = 11.sp, letterSpacing = .6.sp)
     }
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
@@ -391,19 +557,70 @@ private fun SettingsPage(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> 
 
 @Composable
 private fun PrivacyPage(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
-        TextButton(onClick = onBack) { Text("← Back") }
-        Spacer(Modifier.height(14.dp))
-        Text("Here for you 💙", fontSize = 30.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(18.dp))
-        Text("LET IT OUT is an AI listening companion, not a therapist or emergency service.", fontSize = 16.sp)
-        Spacer(Modifier.height(16.dp))
-        Text("Your messages are sent to our backend and AI provider when you use AI chat. Do not share information you aren't comfortable sending to those services.")
-        Spacer(Modifier.height(20.dp))
-        Text("Need urgent support?", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(Modifier.height(8.dp))
-        Text("In India: call 112 for emergencies. Tele-MANAS: 14416 for mental health support. If you are elsewhere, contact local emergency services.")
-        Spacer(Modifier.height(20.dp))
-        Text("We do not currently save chat history on our server. This is a prototype; final privacy, terms and deletion policies must be published before release.")
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp)) {
+        PageBackButton(onBack)
+        Spacer(Modifier.height(34.dp))
+        Text("GOOD TO KNOW", color = AppColors.Primary, fontSize = 11.sp, letterSpacing = 1.9.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(9.dp))
+        Text("Privacy & support", fontSize = 34.sp, lineHeight = 39.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
+        Spacer(Modifier.height(10.dp))
+        Text("Clear information for a more comfortable conversation.", color = AppColors.Muted, fontSize = 15.sp, lineHeight = 22.sp)
+        Spacer(Modifier.height(30.dp))
+        InformationCard(Icons.Default.Info, "What this app is", "LET IT OUT is an AI listening companion, not a therapist or emergency service.")
+        Spacer(Modifier.height(12.dp))
+        InformationCard(Icons.Default.Lock, "When you use AI chat", "Your messages are sent to our backend and AI provider. Do not share information you aren't comfortable sending to those services.")
+        Spacer(Modifier.height(12.dp))
+        InformationCard(Icons.Default.Phone, "Need urgent support?", "In India: call 112 for emergencies. Tele-MANAS: 14416 for mental health support. If you are elsewhere, contact local emergency services.", warm = true)
+        Spacer(Modifier.height(25.dp))
+        Text("ABOUT THIS PREVIEW", color = AppColors.Primary, fontSize = 11.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text("We do not currently save chat history on our server. This is a prototype; final privacy, terms and deletion policies must be published before release.", color = AppColors.Muted, fontSize = 13.sp, lineHeight = 20.sp)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PageBackButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(44.dp).background(AppColors.PrimarySoft, CircleShape)) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Primary, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun SettingsItem(icon: ImageVector, title: String, detail: String, destructive: Boolean = false, onClick: () -> Unit) {
+    val tint = if (destructive) AppColors.Error else AppColors.Primary
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = AppColors.Card), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, AppColors.Line)) {
+        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).background(if (destructive) AppColors.Warm else AppColors.PrimarySoft, RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(15.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = if (destructive) AppColors.Error else AppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(detail, color = AppColors.Muted, fontSize = 12.sp, lineHeight = 17.sp)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.Muted)
+        }
+    }
+}
+
+@Composable
+private fun InformationCard(icon: ImageVector, title: String, body: String, warm: Boolean = false) {
+    Surface(
+        color = if (warm) AppColors.Warm else AppColors.Card,
+        shape = RoundedCornerShape(22.dp),
+        border = if (warm) null else BorderStroke(1.dp, AppColors.Line)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(19.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).background(if (warm) AppColors.Card else AppColors.PrimarySoft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = if (warm) AppColors.Error else AppColors.Primary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(13.dp))
+                Text(title, color = AppColors.Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(13.dp))
+            Text(body, color = AppColors.Muted, fontSize = 14.sp, lineHeight = 21.sp)
+        }
     }
 }
