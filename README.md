@@ -40,6 +40,19 @@ apiBaseUrl=http://10.0.2.2:8080/
 
 The app reads the Web OAuth client ID from Firebase's generated `default_web_client_id` after you add `app/google-services.json`. If necessary, `webClientId=YOUR_FIREBASE_WEB_OAUTH_CLIENT_ID.apps.googleusercontent.com` can be set in `local.properties` as a fallback. It is a public identifier, not a secret. To test on a physical Android device, use an HTTPS URL reachable by that device instead of `10.0.2.2`. Release builds intentionally disallow plain HTTP; cleartext is debug-only.
 
+### Build variants and signing
+
+`debug` uses Android's local debug keystore. `release` uses `app/let-it-out-release.keystore` when these values are present in the root `local.properties`:
+
+```properties
+releaseStoreFile=app/let-it-out-release.keystore
+releaseStorePassword=YOUR_STORE_PASSWORD
+releaseKeyAlias=puneeth
+releaseKeyPassword=YOUR_KEY_PASSWORD
+```
+
+Build the signed APK with `./gradlew :app:assembleRelease` and check both variants with `./gradlew :app:signingReport`. The keystore and `local.properties` are ignored by Git. Keep a secure backup of both: an APK signed with this key requires the same signing identity for future updates. The current release build still needs a real HTTPS chat server before it can serve AI replies.
+
 ## 2. Configure Google and guest sign-in
 
 The development Firebase project is configured as recorded in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md). If the ignored `app/google-services.json` is missing from a fresh checkout, download it from the Firebase console. **Explore in preview** is available only when Firebase is absent. Authentication is required for `/v1/chat` to avoid open, unbounded API spending; the separate backend and AI provider still need their own setup.

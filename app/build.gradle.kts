@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,6 +13,16 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.isFile) file.inputStream().use(::load)
+}
+val releaseStoreFile = localProperties.getProperty("releaseStoreFile")?.takeIf(String::isNotBlank)
+val releaseStorePassword = localProperties.getProperty("releaseStorePassword")?.takeIf(String::isNotBlank)
+val releaseKeyAlias = localProperties.getProperty("releaseKeyAlias")?.takeIf(String::isNotBlank)
+val releaseKeyPassword = localProperties.getProperty("releaseKeyPassword")?.takeIf(String::isNotBlank)
+val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }
+
 android {
     namespace = "com.letitout.app"
     compileSdk = 36
@@ -23,6 +35,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "WEB_CLIENT_ID", "\"${project.findProperty("webClientId") ?: ""}\"")
         buildConfigField("String", "API_BASE_URL", "\"${project.findProperty("apiBaseUrl") ?: "http://10.0.2.2:8080/"}\"")
+    }
+    if (hasReleaseSigning) {
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(releaseStoreFile!!)
+            storePassword = releaseStorePassword!!
+            keyAlias = releaseKeyAlias!!
+            keyPassword = releaseKeyPassword!!
+        }
+        buildTypes.getByName("release").signingConfig = signingConfigs.getByName("release")
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {

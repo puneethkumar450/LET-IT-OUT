@@ -8,6 +8,7 @@ local.properties
 !.env.example
 *.jks
 *.keystore
+/app/let-it-out-release.keystore
 *.pem
 *.p12
 *.key
