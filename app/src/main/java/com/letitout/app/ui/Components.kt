@@ -87,7 +87,7 @@ fun PillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
             disabledContainerColor = color.copy(alpha = .4f), disabledContentColor = Color.White
         ),
         modifier = modifier.fillMaxWidth().height(56.dp).then(if (enabled) Modifier.softShadow(color, CircleShape, 8.dp) else Modifier)
-    ) { Text(text, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -103,21 +103,21 @@ fun OutlinePillButton(text: String, onClick: () -> Unit, enabled: Boolean = true
     ) {
         leading()
         Spacer(Modifier.width(12.dp))
-        Text(text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun LinkButton(text: String, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     TextButton(onClick = onClick, modifier = modifier.heightIn(min = 44.dp), colors = ButtonDefaults.textButtonColors(contentColor = color)) {
-        Text(text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun SquareIconButton(icon: ImageVector, description: String, onClick: () -> Unit, shadowColor: Color = AppColors.Ink) {
+fun SquareIconButton(icon: ImageVector, description: String, onClick: () -> Unit, shadowColor: Color = AppColors.Ink, size: Dp = 48.dp) {
     val shape = RoundedCornerShape(16.dp)
-    Surface(onClick = onClick, shape = shape, color = AppColors.Surface, modifier = Modifier.size(48.dp).softShadow(shadowColor, shape, 4.dp)) {
+    Surface(onClick = onClick, shape = shape, color = AppColors.Surface, modifier = Modifier.size(size).softShadow(shadowColor, shape, 4.dp)) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = description, tint = AppColors.Ink, modifier = Modifier.size(22.dp))
         }

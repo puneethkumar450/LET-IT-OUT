@@ -20,6 +20,7 @@ import javax.inject.Singleton
 @Singleton
 class AuthManager @Inject constructor(@ApplicationContext private val context: Context) {
     fun isConfigured(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
+    fun isGoogleConfigured(): Boolean = isConfigured() && webClientId().isNotBlank()
     fun isSignedIn(): Boolean = isConfigured() && FirebaseAuth.getInstance().currentUser != null
     fun isGuest(): Boolean = isSignedIn() && FirebaseAuth.getInstance().currentUser?.isAnonymous == true
     fun userName(): String? = if (isConfigured()) FirebaseAuth.getInstance().currentUser?.displayName else null
@@ -32,9 +33,10 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
 
     suspend fun signInGoogle(activity: Activity) {
         check(isConfigured()) { "Add Firebase configuration to enable Google sign-in." }
-        check(BuildConfig.WEB_CLIENT_ID.isNotBlank()) { "Configure webClientId in local gradle.properties." }
+        val clientId = webClientId()
+        check(clientId.isNotBlank()) { "Enable Google sign-in in Firebase and download the updated google-services.json." }
         val option = GetGoogleIdOption.Builder()
-            .setServerClientId(BuildConfig.WEB_CLIENT_ID)
+            .setServerClientId(clientId)
             .setFilterByAuthorizedAccounts(false)
             .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
@@ -63,5 +65,11 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
         check(isSignedIn()) { "No authenticated account to delete." }
         FirebaseAuth.getInstance().currentUser!!.delete().await()
         CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+    }
+
+    private fun webClientId(): String {
+        val resourceId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        val generatedId = if (resourceId != 0) context.getString(resourceId) else ""
+        return generatedId.ifBlank { BuildConfig.WEB_CLIENT_ID }
     }
 }

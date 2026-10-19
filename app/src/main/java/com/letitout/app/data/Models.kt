@@ -18,10 +18,10 @@ data class MoodPalette(val surface: Color, val bubble: Color, val accent: Color,
 fun Mood.palette() = when (this) {
     Mood.ANGRY -> MoodPalette(Color(0xFFFFF3EC), Color(0xFFFFD9C9), Color(0xFFC9633F), Color(0xFFFFE3D6))
     Mood.SAD -> MoodPalette(Color(0xFFEEF4FF), Color(0xFFDCE7FF), Color(0xFF3F7FC9), Color(0xFFDDEBFF))
-    Mood.STRESSED -> MoodPalette(Color(0xFFECFBF6), Color(0xFFCFF2E6), Color(0xFF1F8C72), Color(0xFFD6F5EA))
-    Mood.ANXIOUS -> MoodPalette(Color(0xFFEDF8FA), Color(0xFFD4EEF3), Color(0xFF2A8BA3), Color(0xFFD4EEF3))
+    Mood.STRESSED -> MoodPalette(Color(0xFFECFBF6), Color(0xFFCFF2E6), Color(0xFF1F8C72), Color(0xFFD9F5EA))
+    Mood.ANXIOUS -> MoodPalette(Color(0xFFEDF8FA), Color(0xFFD4EEF3), Color(0xFF2A8BA3), Color(0xFFD8F2F6))
     Mood.LONELY -> MoodPalette(Color(0xFFFFF0F5), Color(0xFFFFDCE8), Color(0xFFC9507F), Color(0xFFFFE0EC))
-    Mood.HAPPY -> MoodPalette(Color(0xFFFFFBE8), Color(0xFFFFF0B8), Color(0xFFA67C00), Color(0xFFFFF3C4))
+    Mood.HAPPY -> MoodPalette(Color(0xFFFFFBE8), Color(0xFFFFF0B8), Color(0xFFA67C00), Color(0xFFFFF3BE))
     Mood.TALK -> MoodPalette(Color(0xFFF3F0FF), Color(0xFFE6E1FF), Color(0xFF6A5AE0), Color(0xFFE6E1FF))
 }
 

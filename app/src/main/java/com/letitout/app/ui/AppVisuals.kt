@@ -40,10 +40,10 @@ object AppColors {
     val Track = Color(0xFFD6D2F0)
     val Divider = Color(0xFFF0EEF9)
     val Peach = Color(0xFFFFE3D6)
-    val Mint = Color(0xFFD6F5EA)
-    val Green = Color(0xFF1F8C72)
+    val Mint = Color(0xFFCFF2E6)
+    val Green = Color(0xFF238D7C)
     val Sky = Color(0xFF70B8FF)
-    val Danger = Color(0xFFB5472A)
+    val Danger = Color(0xFFC9633F)
     val Warning = Color(0xFFE0A33D)
 }
 

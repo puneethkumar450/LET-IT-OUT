@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -56,21 +57,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.letitout.app.data.Mood
 import com.letitout.app.data.palette
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 @Composable
 internal fun SplashScreen(onContinue: () -> Unit) {
     val latestOnContinue by rememberUpdatedState(onContinue)
     LaunchedEffect(Unit) { delay(1400); latestOnContinue() }
     Box(Modifier.fillMaxSize().background(AppColors.Background).clickable(onClickLabel = "Continue", onClick = onContinue)) {
-        Blob(320.dp, AppColors.Lavender, Modifier.align(Alignment.TopStart).offset((-80).dp, (-120).dp).alpha(.9f))
-        Blob(360.dp, AppColors.Mint, Modifier.align(Alignment.BottomEnd).offset(100.dp, 140.dp).alpha(.9f))
-        Blob(180.dp, AppColors.Peach, Modifier.align(Alignment.TopEnd).offset(60.dp, 300.dp).alpha(.8f))
-        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
-            BrandMark(size = 132.dp, corner = 40.dp, glyph = 72.dp)
+        Blob(342.dp, AppColors.Lavender, Modifier.align(Alignment.TopStart).offset((-94).dp, (-114).dp).alpha(.9f))
+        Blob(365.dp, AppColors.Mint, Modifier.align(Alignment.BottomEnd).offset(105.dp, 153.dp).alpha(.9f))
+        Blob(164.dp, AppColors.Peach, Modifier.align(Alignment.TopEnd).offset(89.dp, 310.dp).alpha(.8f))
+        Column(Modifier.align(Alignment.Center).offset(y = (-5).dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(35.dp)) {
+            BrandMark(size = 112.dp, corner = 30.dp, glyph = 62.dp)
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("LET IT OUT", style = DisplayStyle, fontSize = 40.sp, lineHeight = 44.sp, letterSpacing = 6.sp)
+                Text("LET IT OUT", style = DisplayStyle, fontSize = 39.sp, lineHeight = 44.sp, letterSpacing = 6.sp)
                 Text("Your Feelings Matter.", color = AppColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -103,8 +107,8 @@ internal fun OnboardingScreen(onSkip: () -> Unit, onGetStarted: () -> Unit) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 Box(Modifier.weight(1f).fillMaxWidth().clipToBounds(), contentAlignment = Alignment.Center) { OnboardingArt(index) }
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(page.title, style = DisplayStyle, fontSize = 30.sp, lineHeight = 35.sp, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
-                    Text(page.body, Modifier.widthIn(max = 300.dp), color = AppColors.Muted, fontSize = 17.sp, lineHeight = 25.sp, textAlign = TextAlign.Center)
+                    Text(page.title, style = DisplayStyle, fontSize = 29.sp, lineHeight = 33.sp, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+                    Text(page.body, Modifier.widthIn(max = 322.dp), color = AppColors.Muted, fontSize = 16.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -148,9 +152,9 @@ private fun ArtBubble(text: String, fromUser: Boolean, modifier: Modifier = Modi
     val shape = if (fromUser) RoundedCornerShape(24.dp, 24.dp, 6.dp, 24.dp) else RoundedCornerShape(24.dp, 24.dp, 24.dp, 6.dp)
     val color = if (fromUser) AppColors.Primary else AppColors.Surface
     Text(
-        text, modifier.widthIn(max = 200.dp).softShadow(if (fromUser) AppColors.Primary else AppColors.Ink, shape, 8.dp)
-            .background(color, shape).padding(horizontal = 18.dp, vertical = 14.dp),
-        color = if (fromUser) Color.White else AppColors.Ink, fontSize = 15.sp, lineHeight = 21.sp
+        text, modifier.width(234.dp).softShadow(if (fromUser) AppColors.Primary else AppColors.Ink, shape, 8.dp)
+            .background(color, shape).padding(horizontal = 16.dp, vertical = 18.dp),
+        color = if (fromUser) Color.White else AppColors.Ink, fontSize = 14.sp, lineHeight = 19.sp
     )
 }
 
@@ -191,22 +195,24 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
     fun attempt(fallback: String, action: suspend () -> Unit) {
         scope.launch {
             working = true; error = null
-            try { action(); vm.refreshAuth(); onSignedIn() }
+            try { withTimeout(60_000) { action() }; vm.refreshAuth(); onSignedIn() }
+            catch (_: TimeoutCancellationException) { error = "Sign-in took too long. Please try again." }
+            catch (t: CancellationException) { throw t }
             catch (t: Exception) { error = t.message ?: fallback }
             finally { working = false }
         }
     }
     ScrollScreen(
-        AppColors.Background, PaddingValues(start = 24.dp, top = 40.dp, end = 24.dp, bottom = 20.dp),
+        AppColors.Background, PaddingValues(start = 24.dp, top = 23.dp, end = 24.dp, bottom = 0.dp),
         decor = { Blob(340.dp, AppColors.Lavender, Modifier.align(Alignment.TopEnd).offset(120.dp, (-140).dp)) }
     ) {
-        BrandMark()
-        Spacer(Modifier.height(20.dp))
+        BrandMark(size = 56.dp, corner = 15.dp, glyph = 31.dp)
+        Spacer(Modifier.height(56.dp))
         Text("Welcome", style = DisplayStyle, fontSize = 32.sp, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(10.dp))
-        Text("Sign in to keep your account across devices, or just start talking as a guest.", color = AppColors.Muted, fontSize = 17.sp, lineHeight = 25.sp)
-        Spacer(Modifier.height(32.dp))
-        OutlinePillButton("Continue with Google", enabled = configured && !working, leading = { GoogleBadge() }, onClick = {
+        Text("Sign in to keep your preferences across devices, or just start talking as a guest.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
+        Spacer(Modifier.height(72.dp))
+        OutlinePillButton("Continue with Google", enabled = vm.auth.isGoogleConfigured() && !working, leading = { GoogleBadge() }, onClick = {
             attempt("Google sign-in didn't complete") { vm.auth.signInGoogle(activity) }
         })
         Spacer(Modifier.height(14.dp))
@@ -215,8 +221,8 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
         })
         Spacer(Modifier.height(14.dp))
         Text(
-            "Guest mode needs no account. You can link Google later in Settings.",
-            Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 14.sp, lineHeight = 21.sp, textAlign = TextAlign.Center
+            "Guest mode needs no account. You can link Google later in Settings and keep your preferences.",
+            Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
         )
         if (working) {
             Spacer(Modifier.height(16.dp))
@@ -229,16 +235,19 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
                 Text("Sign-in is unavailable until Firebase is configured. You can still look around in preview.", fontSize = 14.sp, lineHeight = 20.sp)
                 LinkButton("Explore in preview", AppColors.Primary, onPreview, Modifier.align(Alignment.End))
             }
+        } else if (!vm.auth.isGoogleConfigured()) {
+            Spacer(Modifier.height(20.dp))
+            Text("Google sign-in is still being set up. You can continue as a guest.", color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp)
         }
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(32.dp))
         val cardShape = RoundedCornerShape(20.dp)
         Row(
-            Modifier.fillMaxWidth().softShadow(AppColors.Ink, cardShape, 3.dp).background(AppColors.Surface, cardShape).padding(16.dp),
+            Modifier.fillMaxWidth().heightIn(min = 93.dp).softShadow(AppColors.Ink, cardShape, 3.dp).background(AppColors.Surface, cardShape).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(AppIcons.ShieldCheck, contentDescription = null, tint = AppColors.Green, modifier = Modifier.size(24.dp))
-            Text("We never see your Google password. Sign-in only shares your name and email with Let It Out.", fontSize = 14.sp, lineHeight = 21.sp)
+            Text("We never see your Google password. Sign-in\nonly shares your name and email with\nLet It Out.", fontSize = 13.sp, lineHeight = 18.sp)
         }
         Spacer(Modifier.height(16.dp))
         val linkStyle = TextLinkStyles(SpanStyle(color = AppColors.Primary, fontWeight = FontWeight.Bold))
@@ -250,7 +259,7 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
                 withLink(LinkAnnotation.Clickable("privacy", linkStyle) { onPrivacy() }) { append("Privacy Policy") }
                 append(". Let It Out is for adults 18 and older.")
             },
-            Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 12.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
+            Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center
         )
     }
 }

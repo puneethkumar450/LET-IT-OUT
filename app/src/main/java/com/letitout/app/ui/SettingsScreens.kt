@@ -194,17 +194,16 @@ private fun ThemeOption(title: String, detail: String, selected: Boolean, onSele
 private class HelpTopic(val icon: ImageVector, val mood: Mood, val title: String, val summary: String, val detail: String)
 
 private val helpTopics = listOf(
-    HelpTopic(AppIcons.Chat, Mood.TALK, "Not a therapist", "An AI companion, not medical care or diagnosis",
+    HelpTopic(AppIcons.Chat, Mood.TALK, "Not a therapist", "An AI companion, not medical care or\ndiagnosis",
         "Let It Out is an AI listening companion. It can't diagnose or treat anything, and it isn't a therapist, doctor or emergency service."),
-    HelpTopic(AppIcons.Sync, Mood.SAD, "How your messages are processed", "Sent to our server and an AI provider to reply",
+    HelpTopic(AppIcons.Sync, Mood.SAD, "How your messages are processed", "Sent to our server and an AI provider to\nreply",
         "Your messages are sent to our server and an AI provider so a reply can be written. Don't share anything you aren't comfortable sending to those services."),
-    HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Mood, settings on your device — not conversations",
+    HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Mood, settings on your device — not\nconversations",
         "Your selected mood and settings stay on this device. We don't save chat history on our server, and a conversation is cleared when you close the app."),
-    HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat, wipe this device, or delete your account",
+    HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat, wipe this device, or delete\nyour account",
         "Start a new conversation from the ⋯ menu in a chat, clear conversation data on this device in Settings, or delete your account in Settings › Account."),
-    HelpTopic(AppIcons.People, Mood.LONELY, "Finding human support", "Helplines, counsellors and when to reach out",
-        "In India, call 112 in an emergency or Tele-MANAS on 14416 for free mental health support, any time. Elsewhere, contact your local emergency number or someone you trust."),
-    HelpTopic(AppIcons.Mail, Mood.HAPPY, "Contact support", "letitout.co.in", "Reach the Let It Out team through letitout.co.in.")
+    HelpTopic(AppIcons.People, Mood.LONELY, "Finding human support", "Helplines, counsellors and when to reach\nout",
+        "In India, call 112 in an emergency or Tele-MANAS on 14416 for free mental health support, any time. Elsewhere, contact your local emergency number or someone you trust.")
 )
 
 @Composable
@@ -217,9 +216,9 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxWidth().background(AppColors.Mint, RoundedCornerShape(24.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(AppIcons.Phone, contentDescription = null, tint = AppColors.Green, modifier = Modifier.size(24.dp))
-                Text("Need a real person right now?", style = DisplayStyle, fontSize = 20.sp, lineHeight = 25.sp, modifier = Modifier.semantics { heading() })
+                Text("Need a real person right now?", style = DisplayStyle, fontSize = 18.sp, lineHeight = 24.sp, modifier = Modifier.semantics { heading() })
             }
-            Text("Let It Out is an AI and can't help in an emergency. These lines are answered by people.", fontSize = 14.sp, lineHeight = 21.sp)
+            Text("Let It Out is an AI and can't help in an emergency. These lines are answered by people.", fontSize = 13.sp, lineHeight = 19.sp)
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 HelplineButton("Tele-MANAS 14416", "Mental health · free · 24/7", filled = true, Modifier.weight(1f)) { dialNumber(context, "14416") }
                 HelplineButton("Emergency 112", "Immediate danger", filled = false, Modifier.weight(1f)) { dialNumber(context, "112") }
@@ -237,7 +236,7 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(
             "Let It Out does not diagnose, treat or cure any condition. Helpline numbers are for India and are checked before each release.",
-            Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 12.sp, lineHeight = 19.sp
+            Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
         )
     }
 }
@@ -250,7 +249,7 @@ private fun HelplineButton(title: String, detail: String, filled: Boolean, modif
     ) {
         Column(Modifier.heightIn(min = 56.dp).padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)) {
             Text(title, color = if (filled) Color.White else AppColors.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(detail, color = if (filled) Color.White.copy(alpha = .9f) else AppColors.Muted, fontSize = 12.sp)
+            Text(detail, color = if (filled) Color.White.copy(alpha = .9f) else AppColors.Muted, fontSize = 11.sp)
         }
     }
 }
@@ -264,12 +263,12 @@ private fun HelpTopicRow(topic: HelpTopic, expanded: Boolean, onToggle: () -> Un
             .padding(horizontal = 16.dp, vertical = 12.dp).animateContentSize()
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(36.dp).background(palette.tile, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(38.dp).background(palette.tile, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
                 Icon(topic.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(topic.title, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Text(topic.summary, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(topic.title, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.Bold)
+                Text(topic.summary, color = AppColors.Muted, fontSize = 11.sp, lineHeight = 15.sp)
             }
             Icon(AppIcons.ChevronRight, contentDescription = null, tint = AppColors.Muted, modifier = Modifier.size(18.dp).rotate(if (expanded) 90f else 0f))
         }
