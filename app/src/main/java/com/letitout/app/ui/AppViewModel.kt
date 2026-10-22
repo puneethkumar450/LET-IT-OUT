@@ -12,6 +12,7 @@ import com.letitout.app.data.ReminderSettings
 import com.letitout.app.data.ReportReason
 import com.letitout.app.data.UserPreferences
 import com.letitout.app.data.friendlyMessage
+import com.letitout.app.data.reportFailureMessage
 import com.letitout.app.reminder.ReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -107,7 +108,7 @@ class AppViewModel @Inject constructor(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (t: Exception) {
-                REPORT_FAILED
+                reportFailureMessage(t) ?: REPORT_FAILED
             }
             if (requestGeneration == generation) _state.update { it.copy(reportNotice = notice) }
         }
@@ -141,6 +142,42 @@ class AppViewModel @Inject constructor(
         val reminder = _state.value.reminder
         setReminder(false, reminder.hour, reminder.minute)
         clearCheckIns()
+    }
+
+    /**
+     * Signs out and clears this phone's check-ins, reminder and conversation. Runs in the ViewModel, so leaving or
+     * rotating Settings halfway can't skip the clean-up after Firebase has already signed out.
+     */
+    fun signOut(onDone: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                auth.signOut()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (ignored: Exception) {
+                // Best effort; refreshAuth below shows whatever state sign-out actually reached.
+            } finally {
+                clearLocalData(); clearConversation(); refreshAuth()
+            }
+            onDone()
+        }
+    }
+
+    /** Deletes the account; local data is cleared once nobody is signed in. [onError] gets a friendly sentence. */
+    fun deleteAccount(onDone: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            val error = try {
+                auth.deleteAccount()
+                null
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (t: Exception) {
+                friendlyMessage(t)
+            }
+            if (!auth.isSignedIn()) { clearConversation(); clearLocalData() }
+            refreshAuth()
+            if (error == null) onDone() else onError(error)
+        }
     }
 
     private fun startNewConversation(mood: Mood) {

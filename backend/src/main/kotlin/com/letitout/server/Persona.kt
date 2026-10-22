@@ -55,6 +55,22 @@ object Persona {
         "Hey, I'm right here with you. This is more than anyone should have to carry by themselves. The best person to help you through it is a doctor, so please reach out to one when you can. And if it feels like too much right now, call Tele-MANAS on 14416. It's free, 24x7, and someone trained will listen. I hope you can tell one person you trust too. Whenever you want to keep talking, I'm listening."
     )
 
+    // For people writing in Devanagari or Telugu script. These translations still need a native speaker's review.
+    internal val hindiFallbackReplies: List<String> = listOf(
+        "आपने मुझे बताया, इसके लिए शुक्रिया, और मुझे खुशी है कि आप यहाँ हैं। जो आप उठा रहे हैं वह बहुत भारी है, और इसे अकेले उठाने की ज़रूरत नहीं है। सच कहूँ तो इस वक़्त डॉक्टर से बात करना ही सबसे अच्छा रास्ता है, और Tele-MANAS (14416) मुफ़्त है, 24x7 खुला है, जहाँ प्रशिक्षित काउंसलर सुनते हैं। उम्मीद है कोई अपना, जिस पर आप भरोसा करते हैं, उसे भी आप बता पाएँगे। मैं यहीं हूँ, जब चाहें और बताइए।",
+        "यह सब झेलना बहुत ज़्यादा है, और इसमें कोई कमज़ोरी नहीं है। एक डॉक्टर सच में मदद कर सकते हैं, और यही आपके लिए सबसे अच्छा रास्ता है। अगर अभी किसी से बात करनी हो, तो Tele-MANAS को 14416 पर कॉल कर सकते हैं, यह मुफ़्त है और 24x7 खुला है। किसी करीबी को भी बता दीजिए कि आप कैसा महसूस कर रहे हैं। मैं यहीं आपके साथ हूँ। सबसे भारी क्या लग रहा है?",
+        "मैं यहीं हूँ, आपके साथ। यह किसी के लिए भी अकेले उठाने से ज़्यादा है। इसमें सबसे अच्छी मदद एक डॉक्टर कर सकते हैं, तो जब हो सके, डॉक्टर से ज़रूर मिलिए। और अगर अभी बहुत ज़्यादा लग रहा हो, तो Tele-MANAS को 14416 पर कॉल कीजिए। यह मुफ़्त है, 24x7, और कोई प्रशिक्षित इंसान सुनेगा। उम्मीद है आप किसी भरोसेमंद को भी बता पाएँगे। जब भी बात करनी हो, मैं यहीं हूँ।"
+    )
+
+    internal val teluguFallbackReplies: List<String> = listOf(
+        "మీరు నాతో చెప్పినందుకు నిజంగా సంతోషంగా ఉంది, మీరు ఇక్కడ ఉన్నందుకు కూడా. మీరు మోస్తున్నది చాలా బరువైనది, దీన్ని ఒంటరిగా మోయాల్సిన అవసరం లేదు. నిజం చెప్పాలంటే, ఇప్పుడు డాక్టర్‌ని కలవడమే అన్నిటికంటే మంచి మార్గం. Tele-MANAS (14416) ఉచితం, 24x7, అక్కడ శిక్షణ పొందిన కౌన్సెలర్లు వింటారు. మీరు నమ్మే ఎవరితోనైనా కూడా ఇది పంచుకోగలరని ఆశిస్తున్నాను. నేను ఇక్కడే ఉన్నాను, మీకు ఎప్పుడు అనిపిస్తే అప్పుడు ఇంకా చెప్పండి.",
+        "ఇదంతా భరించడం చాలా ఎక్కువ, ఇందులో బలహీనత ఏమీ లేదు. ఒక డాక్టర్ నిజంగా సహాయం చేయగలరు, అదే మీకు అన్నిటికంటే మంచి మార్గం. ఇప్పుడే ఎవరితోనైనా మాట్లాడాలనిపిస్తే, Tele-MANAS (14416) కి కాల్ చేయండి. ఇది ఉచితం, 24x7 అందుబాటులో ఉంటుంది. మీకు దగ్గరైన ఒకరికి మీరు ఎలా ఉన్నారో చెప్పండి. నేను మీతోనే ఉన్నాను. ఏది అన్నిటికంటే బరువుగా అనిపిస్తోంది?",
+        "నేను ఇక్కడే ఉన్నాను, మీతోనే. ఇది ఎవరైనా ఒంటరిగా మోయగలిగే దానికంటే ఎక్కువ. దీనిలో మీకు సహాయం చేయడానికి అన్నిటికంటే మంచి వ్యక్తి ఒక డాక్టర్, కాబట్టి వీలైనప్పుడు డాక్టర్‌ని తప్పకుండా కలవండి. ఇప్పుడే చాలా ఎక్కువగా అనిపిస్తే, Tele-MANAS (14416) కి కాల్ చేయండి. ఇది ఉచితం, 24x7, శిక్షణ పొందిన ఎవరో వింటారు. మీరు నమ్మే ఒకరికి కూడా చెప్పగలరని ఆశిస్తున్నాను. మీకు ఎప్పుడు మాట్లాడాలనిపించినా, నేను వింటున్నాను."
+    )
+
+    /** Sent on an ordinary turn when the only sentences in a reply used words the companion never says. */
+    internal const val neutralReply = "I'm right here with you. Tell me a little more about it."
+
     internal const val rewriteNudge = "For this reply, use none of the words you never use, not even to echo them. Pick soft, everyday words instead."
 
     fun systemPrompt(mood: String, extraCare: Boolean): String = buildString {
@@ -64,10 +80,18 @@ object Persona {
         append("\n\nUser-selected mood: ").append(mood).append(". It may not be accurate.")
     }
 
+    /** Fallbacks in the script of [seed] (Telugu, Devanagari, otherwise English). Romanised Hinglish stays English for now. */
+    internal fun fallbacksFor(seed: String): List<String> = when {
+        seed.any { it in '\u0C00'..'\u0C7F' } -> teluguFallbackReplies
+        seed.any { it in '\u0900'..'\u097F' } -> hindiFallbackReplies
+        else -> supportFallbackReplies
+    }
+
     /** Picks a fallback from [seed], skipping ones already sent in [recentReplies]; if all were, the least recently sent. */
     fun fallbackReply(seed: String, recentReplies: List<String> = emptyList()): String {
-        val start = Math.floorMod(seed.hashCode(), supportFallbackReplies.size)
-        val ordered = supportFallbackReplies.indices.map { supportFallbackReplies[(start + it) % supportFallbackReplies.size] }
+        val replies = fallbacksFor(seed)
+        val start = Math.floorMod(seed.hashCode(), replies.size)
+        val ordered = replies.indices.map { replies[(start + it) % replies.size] }
         return ordered.firstOrNull { it !in recentReplies } ?: ordered.minBy { recentReplies.lastIndexOf(it) }
     }
 }

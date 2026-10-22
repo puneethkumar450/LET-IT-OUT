@@ -4,6 +4,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.HttpException
@@ -81,6 +82,17 @@ class ChatErrorsTest {
 
     @Test fun friendlyExceptionPassesThrough() {
         assertEquals("Please sign in first.", friendlyMessage(FriendlyException("Please sign in first.")))
+    }
+
+    @Test fun reportFailuresKeepOnlyTheUsefulDetails() {
+        val limit = "Thanks, we already have your recent reports. Please try again a little later."
+        assertEquals(limit, reportFailureMessage(http(429, """{"error":"$limit"}""")))
+        assertTrue(reportFailureMessage(http(401)).orEmpty().contains("sign in again"))
+        assertTrue(reportFailureMessage(http(403)).orEmpty().contains("sign in again"))
+        assertEquals("Please sign in first.", reportFailureMessage(FriendlyException("Please sign in first.")))
+        assertNull(reportFailureMessage(http(503)))
+        assertNull(reportFailureMessage(http(500)))
+        assertNull(reportFailureMessage(IOException("offline")))
     }
 
     @Test fun unknownFailuresStayGentleAndHideDetails() {

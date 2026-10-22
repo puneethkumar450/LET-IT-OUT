@@ -45,16 +45,7 @@ class ChatRepository @Inject constructor(
 ) : ChatGateway {
     override suspend fun reply(mood: Mood, conversation: List<ChatMessage>): ChatReply {
         val idToken = idToken()
-        // The opening question the app showed goes first, so the reply follows on from what they were asked.
-        val messages = (listOf(ApiMessage("assistant", mood.prompt)) + conversation
-            .map { it.copy(text = it.text.trim().take(2000)) }
-            .filter { it.text.isNotBlank() }
-            .map { ApiMessage(if (it.fromUser) "user" else "assistant", it.text) })
-            .takeLast(12)
-        val response = api.chat("Bearer $idToken", ChatRequest(mood.name, messages))
-        val text = response.reply.trim()
-        if (text.isEmpty()) throw FriendlyException("I couldn't put a reply together just now. Mind trying again?")
-        return ChatReply(text, response.safetyState == "SUPPORT_SUGGESTED")
+        return api.chat("Bearer $idToken", chatRequestFor(mood, conversation)).toChatReply()
     }
 
     override suspend fun report(reason: ReportReason, replyText: String) {

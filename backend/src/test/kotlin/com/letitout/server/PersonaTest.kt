@@ -33,21 +33,40 @@ class PersonaTest {
 
     @Test fun fallbackRepliesAreGentleAndPointToADoctor() {
         assertEquals(3, Persona.supportFallbackReplies.size)
-        Persona.supportFallbackReplies.forEach { reply ->
-            assertNoBannedWords(reply)
-            assertTrue("14416" in reply)
-            assertTrue("Tele-MANAS" in reply)
-            assertTrue("doctor" in reply.lowercase())
-            assertTrue(mentionsProfessionalHelp(reply))
-            assertFalse(soundsAlarming(reply))
-            assertTrue(reply.count { it == '?' } <= 1)
+        listOf(
+            Persona.supportFallbackReplies to "doctor",
+            Persona.hindiFallbackReplies to "डॉक्टर",
+            Persona.teluguFallbackReplies to "డాక్టర్"
+        ).forEach { (replies, doctor) ->
+            assertTrue(replies.size >= 2)
+            assertEquals(replies.size, replies.toSet().size)
+            replies.forEach { reply ->
+                assertNoBannedWords(reply)
+                assertTrue("14416" in reply)
+                assertTrue("Tele-MANAS" in reply)
+                assertTrue(doctor in reply.lowercase(), reply)
+                assertTrue(mentionsProfessionalHelp(reply))
+                assertFalse(soundsAlarming(reply), reply)
+                assertTrue(reply.count { it == '?' } <= 1)
+            }
         }
+    }
+
+    @Test fun fallbackFollowsThePersonsScript() {
+        assertTrue(Persona.fallbackReply("मैं जीना नहीं चाहता") in Persona.hindiFallbackReplies)
+        assertTrue(Persona.fallbackReply("నాకు చనిపోవాలని ఉంది") in Persona.teluguFallbackReplies)
+        assertTrue(Persona.fallbackReply("main jeena nahi chahta") in Persona.supportFallbackReplies)
+        val first = Persona.fallbackReply("मैं जीना नहीं चाहता")
+        val second = Persona.fallbackReply("मैं जीना नहीं चाहता", listOf(first))
+        assertTrue(second != first && second in Persona.hindiFallbackReplies)
     }
 
     @Test fun guidanceTextAvoidsBannedWords() {
         Persona.moodGuidance.values.forEach(::assertNoBannedWords)
         assertNoBannedWords(Persona.extraCareGuidance)
         assertNoBannedWords(Persona.rewriteNudge)
+        assertNoBannedWords(Persona.neutralReply)
+        assertFalse(soundsAlarming(Persona.neutralReply))
     }
 
     @Test fun fallbackChoiceIsStable() {

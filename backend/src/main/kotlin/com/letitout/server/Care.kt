@@ -30,6 +30,7 @@ private val benignSpans = listOf(
     "\\b(fell|fall|slipped|tripped)( down| over)? and (hurt|cut|injured) myself\\b",
     "\\b(hurt|cut|injured) myself (at|on|in|during) (the |a |my )?(\\w+ )?(practice|training|gym|paper|game|match|kitchen|stairs)\\b",
     "\\b(cut|cutting) myself (some )?slack\\b",
+    "\\b(cut|cutting) myself (a|some|another) (slice|piece|bit|break)\\b",
     "\\b(cut|cutting) myself off\\b(?! and on)",
     "\\bcould (just )?kill myself for\\b",
     "\\b(killing|killed) myself (studying|working|at work|at the office|at the gym|working out|" +
@@ -50,26 +51,32 @@ private val carePatterns = listOf(
     "\\bwish i could (just )?die\\b",
     "\\bwish (i (was|were|had)|id) never (been )?born\\b",
     "\\bi deserve to die\\b",
-    "\\b(life|living) (isnt|is not|aint|is no longer) worth (living|it)\\b",
+    "\\b(life|living) (isnt|is not|aint|is no longer) worth living\\b",
     "\\b(dont|do not|didnt|no longer) (want|wanna) (to )?(exist|be alive)\\b",
     "\\b(dont|do not|no longer) (want|wanna) (to )?(live|be here|go on|wake up|continue living) ?(anymore|any more)\\b",
     "\\b(dont|do not) (want|wanna) (to )?(live like this|wake up again|wake up ever again)\\b",
-    "\\b(dont|do not|no longer) (want|wanna) (to )?(live|go on) ?(\\.|$)",
+    // "I don't want to live, honestly, with my in-laws" is about where or with whom, not about living.
+    "\\b(dont|do not|no longer) (want|wanna) (to )?(live|go on) ?" +
+        "(\\.(?! (\\w+ \\. )?(with|in|at|near|here|there|under|like|without|alone|together|abroad)\\b)|$)",
     "\\b(dont|do not) (want|wanna) (to )?wake up tomorrow\\b",
     "\\b(dont|do not|cant|cannot|no longer) (want to |wanna )?(go on|carry on|keep going) with (my |this )?life\\b",
     "\\b(cant|cannot) (live|go on|keep living) (like this )?(anymore|any more)\\b",
-    "\\b(cant|cannot) go on( like this)? ?(\\.|$)",
     "\\b(done|finished|tired) with (life|living|being alive)( anymore| any more)? ?(\\.|$)",
     "\\b(dont feel like living|no will to live|tired of living|tired of being alive|sick of living)\\b",
     "\\bbetter off (without me|dead)\\b",
     "\\bbetter off (if )?i (was|were|am) (dead|gone|not (here|around|alive))\\b",
     "\\bbetter off if i (wasnt|werent|didnt exist|never existed|disappeared)\\b",
-    "\\bno reason (left )?to (live|go on|keep going|be alive|exist)\\b",
+    "\\b(no|dont have a|dont have any|dont see a|dont see any|not a single) reason (left )?(for me )?to " +
+        "(live|go on|keep going|be alive|exist)\\b",
+    "\\bwant (my|this) life to (end|be over|stop)\\b",
+    "\\bwish i (wasnt|werent|was not|were not) alive\\b",
+    "\\bwish i (didnt|did not) exist\\b",
+    "\\b(rather|prefer to) not (exist|be alive)\\b",
+    "\\b(happier|better)( off)? if i (was|were) (dead|gone|not (here|around))\\b",
     "\\bnothing (left )?to live for\\b",
     "\\bno (point|use|sense) (in )?(living|being alive|going on|existing)\\b",
     "\\b(whats|what is|dont see|do not see|see no) the point (of|in) (living|being alive|going on|existing)\\b",
     "\\b(end|ending) (it all|my life)\\b",
-    "\\b(want|wanna) (to )?(just )?end it( all)? ?(\\.|$)",
     "\\b(want|wanna|going to|gonna) (to )?(just )?end everything\\b(?! (with|between))",
     "\\b(going to|gonna) (just )?end it (all )?(tonight|today|now|soon)\\b",
     "\\b(take|taking) my (own )?life\\b",
@@ -121,10 +128,35 @@ private val careNativePhrases = listOf(
     "చనిపోవాలని", "చచ్చిపోవాలని", "చావాలని", "ఆత్మహత్య", "బ్రతకాలని లేదు", "బతకాలని లేదు"
 ).map(::normalizeForCare)
 
-internal fun needsExtraCare(recentUserMessages: List<String>): Boolean = recentUserMessages.any { message ->
-    val text = benignSpans.fold(normalizeForCare(message)) { acc, span -> span.replace(acc, " . ") }
-    carePatterns.any { it.containsMatchIn(text) } || careNativePhrases.any { it in text }
+// Softer signals: often heavy, but just as often everyday venting ("I can't go on like this" about a job, "I want to end it"
+// about a relationship). They get the extra-care note, which tells the model to ignore figures of speech, but bring up the
+// support card only when the reply itself recommends a doctor or Tele-MANAS.
+private val softCarePatterns = listOf(
+    "\\b(want|wanna) (to )?(just )?end it ?(\\.|$)",
+    "\\b(cant|cannot) go on( like this)? ?(\\.|$)",
+    "\\b(dont|do not|no longer) (want|wanna) (to )?(live|go on) ?(\\.|$)",
+    "(^|\\. |\\b(i|my|this|the|and|but|so|honestly|that|feel|feels|felt|think|like|maybe|sometimes|just|guess|really) )" +
+        "(life|living) (isnt|is not|aint|is no longer) worth it\\b",
+    "\\b(tired|sick) of (my |this )?life\\b",
+    "\\b(want|wish) (everything|it all) (to|would) (end|be over|stop) ?(\\.|$)",
+    "\\bwish i (wasnt|werent|was not|were not) (here|around) ?(anymore|any more|at all)\\b",
+    "\\bdisappear (forever|for good)\\b",
+    "\\b(zindagi|jindagi) se thak (gaya|gayi)\\b",
+    "\\bsab (kuch )?khatam (karna|kar dena) (chahta|chahti)\\b"
+).map(::Regex)
+
+internal enum class CareLevel { NONE, SOFT, HARD }
+
+internal fun careLevel(recentUserMessages: List<String>): CareLevel {
+    val texts = recentUserMessages.map { message -> benignSpans.fold(normalizeForCare(message)) { acc, span -> span.replace(acc, " . ") } }
+    return when {
+        texts.any { text -> carePatterns.any { it.containsMatchIn(text) } || careNativePhrases.any { it in text } } -> CareLevel.HARD
+        texts.any { text -> softCarePatterns.any { it.containsMatchIn(text) } } -> CareLevel.SOFT
+        else -> CareLevel.NONE
+    }
 }
+
+internal fun needsExtraCare(recentUserMessages: List<String>): Boolean = careLevel(recentUserMessages) == CareLevel.HARD
 
 private val helpline = Regex("\\btele[\\s-]?manas\\b|\\b14416\\b", RegexOption.IGNORE_CASE)
 
@@ -138,14 +170,17 @@ private const val NOT_A_ROLE = "(?<!\\b(being|becoming|become|became|as|be) )"
 
 private val professionalHelp = Regex(
     "\\b(see|seeing|talk(ing)? to|speak(ing)? (to|with)|consult(ing)?|visit(ing)?|reach(ing)? out to|meet(ing)?|book(ing)?|" +
-        "by|with|try(ing)?) (a|an) (good |kind |trained )?$PRO\\b|" +
-        "$NOT_A_ROLE\\b(a|an) (good |kind |trained )?$PRO (really |genuinely |honestly |actually )?(would|could|can|might|may|will)\\b|" +
+        "go(ing)? to|checked( out)? by|check(ing)? in with|try(ing)?) (a|an) (good |kind |trained )?$PRO\\b|" +
+        "$NOT_A_ROLE\\b(a|an) (good |kind |trained )?$PRO (really |genuinely |honestly |actually )?(would|could|can|might|may|will) " +
+        "(really |genuinely |honestly |actually )?(help|look|support|guide|be (good|worth|the best|a good|the right))\\b|" +
+        "$NOT_A_ROLE\\b(a|an|your) (good |kind |trained )?$PRO\\b[^.?!]{0,30}\\b(best|right) " +
+        "(option|thing|step|next step|person|bet|choice|way|move|call)\\b|" +
         "\\b(would|could|can|might|may) (a|an) $PRO\\b|" +
         "\\b$PROS (really |genuinely |honestly |actually )?(can|could|might|may|would|will) (really |genuinely |actually )?" +
         "(help|look|support|guide)\\b|" +
         "\\b(get|getting) (a|an) $PRO(['’]s)? (help|opinion|advice|support)\\b|" +
         "\\bbest (option|thing|step|next step|person|way|choice)\\b[^.?!]{0,40}\\b(is|would be) (a|an) $PRO\\b|" +
-        "\\bdoctor (se|ko) (mil|baat|dikha|salah|consult)",
+        "\\bdoctor (se|ko) (mil|baat|dikha|salah|consult)|\\bdoctor (hi )?(best|sabse)",
     RegexOption.IGNORE_CASE
 )
 
@@ -158,11 +193,29 @@ internal fun mentionsProfessionalHelp(reply: String): Boolean =
     mentionsHelpline(reply) || professionalHelp.containsMatchIn(reply) || professionalHelpNative.any { it in reply }
 
 private val alarming = Regex(
-    "\\b(crisis|crises|emergenc(y|ies)|suicid\\w*|life[- ]threatening|are you safe|danger\\w*|" +
-        "kill(s|ed|ing)? (yourself|urself)|die|dies|dying|death|khudkushi|aatmahatya|atmahatya|maut)\\b",
+    "\\b(crisis|crises|emergenc(y|ies)|suicid\\w*|life[- ]threatening|are you safe|danger\\w*|kill\\w*|self[- ]?harm\\w*|unalive|" +
+        "die(?!( down| out|-hard| hard))|dies(?! (down|out))|died(?! (down|out))|dying(?! (down|out))|death|" +
+        "end(ing)? (your|ur) (own )?life|tak(e|ing) (your|ur) (own )?life(?! (back|in|into))|not wanting to (live|be alive)|" +
+        "khudkushi|aatmahatya|atmahatya|maut|marne (ka|ke|ki|wal(a|e|i))|marna|mar ja(a)?n[ae]|chanipoval\\w*|chachipoval\\w*|cha(a)?vaalani|chavalani)\\b",
     RegexOption.IGNORE_CASE
 )
-private val alarmingNative = listOf("आत्महत्या", "खुदकुशी", "मौत", "ఆత్మహత్య", "మరణం", "చావు")
+private val alarmingNative = listOf("आत्महत्या", "खुदकुशी", "मौत", "ఆత్మహత్య", "మరణం", "చావు", "చనిపోవాల", "చచ్చిపోవాల", "చావాల")
+// Hindi "die" forms only as whole words, so words like कमरा or अमर don't count.
+private val alarmingHindi = Regex("(?<![\\p{L}\\p{M}])(मरना|मरने|मर जा)")
 
-/** True when a reply uses words the companion must never say (crisis, emergency, suicide, die, death, ...). */
-internal fun soundsAlarming(reply: String): Boolean = alarming.containsMatchIn(reply) || alarmingNative.any { it in reply }
+/** True when a reply uses words the companion must never say (crisis, emergency, suicide, kill, die, death, ...). */
+internal fun soundsAlarming(reply: String): Boolean =
+    alarming.containsMatchIn(reply) || alarmingNative.any { it in reply } || alarmingHindi.containsMatchIn(reply)
+
+/** The reply without the sentences that use those words; null when too little is left to stand as a reply. */
+internal fun withoutAlarmingSentences(reply: String): String? =
+    reply.trim().split(Regex("(?<=[.!?।])\\s+")).filterNot(::soundsAlarming).joinToString(" ").trim()
+        .takeIf { it.split(Regex("\\s+")).size >= 3 }
+
+private val selfHarmWords = Regex(
+    "\\b(suicid\\w*|(end|ending|take|taking) (your|ur) (own )?life(?! (back|in|into))|self[- ]?harm\\w*)\\b",
+    RegexOption.IGNORE_CASE
+)
+
+/** A draft that brings up self-harm means the turn is heavier than the phrase list noticed. */
+internal fun draftNamesSelfHarm(reply: String): Boolean = selfHarmWords.containsMatchIn(reply)

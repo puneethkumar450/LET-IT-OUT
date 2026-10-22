@@ -50,6 +50,9 @@ class GroqTest {
         assertEquals("That was huge for you.", polishReply("That was **huge** for you."))
         assertEquals("one thing\nanother thing", polishReply("- one thing\n- another thing"))
         assertEquals("first\n\nsecond", polishReply("first\n\n\n\nsecond"))
+        assertEquals("Take a walk\nWrite it down", polishReply("1. Take a walk\n2) Write it down"))
+        assertEquals("That was really hard, and this matters.", polishReply("That was *really* hard, and __this__ `matters`."))
+        assertEquals("Meet at 5.30 pm, 2 * 3 is 6, and snake_case stays.", polishReply("Meet at 5.30 pm, 2 * 3 is 6, and snake_case stays."))
     }
 
     @Test fun capsLongRepliesAtASentence() {

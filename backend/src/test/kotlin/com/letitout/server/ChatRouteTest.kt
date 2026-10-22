@@ -279,13 +279,27 @@ class ChatRouteTest {
         assertEquals(Persona.systemPrompt("SAD", extraCare = true), provider.calls.single().first)
     }
 
-    @Test fun alarmingReplyOnHeavyTurnBecomesGentleFallback() = testApplication {
-        val provider = FakeProvider(reply = "If you are in immediate danger, please call the emergency number 112.")
+    @Test fun alarmingReplyOnHeavyTurnIsRewrittenWithCare() = testApplication {
+        val alarming = "If you are in immediate danger, please call the emergency number 112."
+        val provider = FakeProvider(reply = "That's so heavy, and I'm glad you told me. Seeing a doctor really is the best option, and I'm still here.")
+        provider.queued += alarming
         application { module(deps(provider)) }
+        assertEquals(provider.reply, chat(says(heavy)).assertReply(SUPPORT_SUGGESTED))
+        assertEquals(2, provider.calls.size)
+        assertEquals(Persona.systemPrompt("SAD", extraCare = true) + "\n\n" + Persona.rewriteNudge, provider.calls[1].first)
+        // Both drafts slip and nothing usable is left: a warm fallback, never the flagged words.
+        provider.reply = alarming
         val reply = chat(says(heavy)).assertReply(SUPPORT_SUGGESTED)
         assertTrue(reply in Persona.supportFallbackReplies)
         assertNoBannedWords(reply)
-        assertEquals(1, provider.calls.size)
+        assertEquals(4, provider.calls.size)
+    }
+
+    @Test fun heavyTurnInHindiGetsAHindiFallback() = testApplication {
+        val provider = FakeProvider(failure = ProviderUnavailable())
+        application { module(deps(provider)) }
+        assertTrue(chat(says("मैं जीना नहीं चाहता")).assertReply(SUPPORT_SUGGESTED) in Persona.hindiFallbackReplies)
+        assertTrue(chat(says("నాకు చనిపోవాలని ఉంది")).assertReply(SUPPORT_SUGGESTED) in Persona.teluguFallbackReplies)
     }
 
     @Test fun alarmingReplyOnNormalTurnIsRewrittenOnce() = testApplication {
@@ -295,10 +309,43 @@ class ChatRouteTest {
         assertEquals("Ugh, work drama again? What happened this time?", chat(says("There's a crisis at work", "STRESSED")).assertReply(NORMAL))
         assertEquals(2, provider.calls.size)
         assertEquals(Persona.systemPrompt("STRESSED", extraCare = false) + "\n\n" + Persona.rewriteNudge, provider.calls[1].first)
-        // A rewrite that still slips is sent anyway rather than an error.
+        // A rewrite that still slips loses the flagged sentence; with nothing left, a short neutral line goes out.
         provider.reply = "That deadline sounds like a crisis."
-        assertEquals("That deadline sounds like a crisis.", chat(says("deadline tomorrow", "STRESSED")).assertReply(NORMAL))
+        assertEquals(Persona.neutralReply, chat(says("deadline tomorrow", "STRESSED")).assertReply(NORMAL))
         assertEquals(4, provider.calls.size)
+        provider.reply = "Ugh. That deadline sounds like a crisis. What's due first?"
+        assertEquals("Ugh. What's due first?", chat(says("deadline tomorrow", "STRESSED")).assertReply(NORMAL))
+        assertEquals(6, provider.calls.size)
+    }
+
+    @Test fun alarmingSentenceIsDroppedEvenWithoutTimeForARewrite() = testApplication {
+        // The overall cap has room for the first call only, so no rewrite happens.
+        val provider = FakeProvider(reply = "Ugh. This deadline is killing you. What's due first?")
+        application { module(deps(provider, globalLimiter = RateLimiter(1, 60_000))) }
+        assertEquals("Ugh. What's due first?", chat(says("deadline tomorrow", "STRESSED")).assertReply(NORMAL))
+        assertEquals(1, provider.calls.size)
+    }
+
+    @Test fun draftThatBringsUpSelfHarmTurnsOnCare() = testApplication {
+        val provider = FakeProvider(reply = "That sounds so heavy, and I'm really glad you told me. What feels heaviest right now?")
+        provider.queued += "Are you having suicidal thoughts right now?"
+        application { module(deps(provider)) }
+        assertEquals(provider.reply, chat(says("everything is just too much lately")).assertReply(SUPPORT_SUGGESTED))
+        assertEquals(Persona.systemPrompt("SAD", extraCare = false), provider.calls[0].first)
+        assertEquals(Persona.systemPrompt("SAD", extraCare = true) + "\n\n" + Persona.rewriteNudge, provider.calls[1].first)
+    }
+
+    @Test fun softSignalsGetCareGuidanceButTheCardOnlyWithAHelpSuggestion() = testApplication {
+        val provider = FakeProvider()
+        application { module(deps(provider, limiter = RateLimiter(1, hour), careLimiter = RateLimiter(1, hour))) }
+        chat(says("I can't go on like this")).assertReply(NORMAL)
+        assertEquals(Persona.systemPrompt("SAD", extraCare = true), provider.calls.single().first)
+        provider.reply = "Weeks of this is so much. Honestly, a doctor really is the best option, and I'm still here."
+        chat(says("I'm tired of life")).assertReply(SUPPORT_SUGGESTED)
+        // Out of quota: like heavy turns, never refused.
+        assertTrue(chat(says("I just want to end it")).assertReply(SUPPORT_SUGGESTED) in Persona.supportFallbackReplies)
+        assertEquals(2, provider.calls.size)
+        chat(says("ok")).assertFriendlyError(HttpStatusCode.TooManyRequests)
     }
 
     @Test fun careCheckReadsOnlyTheLastThreeUserMessages() = testApplication {

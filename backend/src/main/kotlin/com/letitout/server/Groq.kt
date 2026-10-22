@@ -113,7 +113,9 @@ internal fun polishReply(text: String): String {
     var result = text.replace("\r\n", "\n").trim()
     while (result.length >= 2 && wrappedInQuotes(result)) result = result.substring(1, result.length - 1).trim()
     result = result.replace("**", "")
-        .lines().joinToString("\n") { it.trimEnd().replace(Regex("^\\s*(?:[-*\u2022]|#{1,6})\\s+"), "") }
+        .lines().joinToString("\n") { it.trimEnd().replace(Regex("^\\s*(?:[-*\u2022]|#{1,6}|\\d{1,2}[.)])\\s+"), "") }
+        .replace(Regex("(?<![\\w*])\\*(?=\\S)([^*\\n]+?)(?<=\\S)\\*(?![\\w*])"), "$1")
+        .replace("__", "").replace("`", "")
         .replace(Regex("\n{3,}"), "\n\n")
         .trim()
     if (result.length <= MAX_REPLY_CHARS) return result

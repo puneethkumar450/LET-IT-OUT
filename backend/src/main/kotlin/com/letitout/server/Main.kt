@@ -22,7 +22,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.io.File
 import java.time.Instant
 
 @Serializable data class Message(val role: String, val content: String)
@@ -60,8 +59,10 @@ class ChatDeps(
     val careLimiter: RateLimiter = RateLimiter(30, HOUR_MILLIS),
     /** Provider calls per minute across all users, so rotating guest accounts cannot run up unbounded spend. */
     val globalLimiter: RateLimiter = RateLimiter(60, 60_000L),
-    val reportSink: ReportSink = FileReportSink(File(System.getenv("REPORTS_FILE")?.takeIf { it.isNotBlank() } ?: "reports.jsonl")),
-    val reportLimiter: RateLimiter = RateLimiter(20, HOUR_MILLIS)
+    val reportSink: ReportSink = FileReportSink.fromEnvironment(),
+    val reportLimiter: RateLimiter = RateLimiter(20, HOUR_MILLIS),
+    /** Reports per hour across all users, so rotating guest accounts cannot fill the disk. */
+    val reportGlobalLimiter: RateLimiter = RateLimiter(300, HOUR_MILLIS)
 ) {
     companion object {
         fun fromEnvironment(): ChatDeps {
@@ -163,19 +164,22 @@ private suspend fun ApplicationCall.handleChat(deps: ChatDeps) {
 
     val recentUserMessages = req.messages.filter { it.role == "user" }.takeLast(3).map { it.content }
     val recentReplies = req.messages.filter { it.role == "assistant" }.map { it.content }
+    val level = careLevel(recentUserMessages)
     // A recent Tele-MANAS mention means the chat already turned heavy, even if the last words slipped past the phrase list.
-    val care = needsExtraCare(recentUserMessages) || recentReplies.takeLast(2).any(::mentionsHelpline)
+    var care = level == CareLevel.HARD || recentReplies.takeLast(2).any(::mentionsHelpline)
+    // Softer signals get the same gentle prompt and are never refused, but the card only follows a reply that suggests help.
+    val gentle = care || level == CareLevel.SOFT
     val fallback = Persona.fallbackReply(req.messages.last().content, recentReplies)
-    // Care turns may borrow normal quota before falling back to a canned reply.
-    val charged = (if (care) listOf(deps.careLimiter, deps.limiter) else listOf(deps.limiter)).firstOrNull { it.tryAcquire(uid) }
-        ?: return if (care) respondReply(fallback, SUPPORT_SUGGESTED)
+    // Gentle turns may borrow normal quota before falling back to a canned reply.
+    val charged = (if (gentle) listOf(deps.careLimiter, deps.limiter) else listOf(deps.limiter)).firstOrNull { it.tryAcquire(uid) }
+        ?: return if (gentle) respondReply(fallback, SUPPORT_SUGGESTED)
             else respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY)
     if (!deps.globalLimiter.tryAcquire(GLOBAL_KEY)) {
         charged.release(uid)
-        return if (care) respondReply(fallback, SUPPORT_SUGGESTED) else respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.BUSY)
+        return if (gentle) respondReply(fallback, SUPPORT_SUGGESTED) else respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.BUSY)
     }
 
-    val prompt = Persona.systemPrompt(req.mood, care)
+    val prompt = Persona.systemPrompt(req.mood, gentle)
     val history = req.messages.takeLast(12)
     val started = System.currentTimeMillis()
     var reply = try {
@@ -185,23 +189,29 @@ private suspend fun ApplicationCall.handleChat(deps: ChatDeps) {
     } catch (e: Exception) {
         charged.release(uid)
         return when {
-            care -> respondReply(fallback, SUPPORT_SUGGESTED)
+            gentle -> respondReply(fallback, SUPPORT_SUGGESTED)
             e is ProviderRateLimited -> respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.BUSY)
             else -> respondError(HttpStatusCode.BadGateway, FriendlyErrors.NO_REPLY)
         }
     }
     if (soundsAlarming(reply)) {
-        if (care) return respondReply(fallback, SUPPORT_SUGGESTED)
+        // A draft that brings up self-harm means the phrase list missed a heavy turn, so the rewrite gets the extra-care note.
+        val rewritePrompt = if (!care && draftNamesSelfHarm(reply)) {
+            care = true
+            Persona.systemPrompt(req.mood, extraCare = true)
+        } else prompt
         // One rewrite when time allows; either way the person gets a reply, never an error over a word.
         if (System.currentTimeMillis() - started < REWRITE_BUDGET_MILLIS && deps.globalLimiter.tryAcquire(GLOBAL_KEY)) {
             reply = try {
-                polishReply(provider.reply(prompt + "\n\n" + Persona.rewriteNudge, history)).ifBlank { reply }
+                polishReply(provider.reply(rewritePrompt + "\n\n" + Persona.rewriteNudge, history)).ifBlank { reply }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 reply
             }
         }
+        // Whatever still slips through (or had no time for a rewrite) loses the sentences that carry those words.
+        if (soundsAlarming(reply)) reply = withoutAlarmingSentences(reply) ?: if (care) fallback else Persona.neutralReply
     }
     respondReply(reply, if (care || mentionsProfessionalHelp(reply)) SUPPORT_SUGGESTED else NORMAL)
 }
@@ -217,6 +227,10 @@ private suspend fun ApplicationCall.handleReport(deps: ChatDeps) {
         return respondError(HttpStatusCode.BadRequest, FriendlyErrors.INVALID)
     }
     if (!deps.reportLimiter.tryAcquire(uid)) return respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY_REPORTS)
+    if (!deps.reportGlobalLimiter.tryAcquire(GLOBAL_KEY)) {
+        deps.reportLimiter.release(uid)
+        return respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY_REPORTS)
+    }
 
     val report = StoredReport(Instant.now().toString(), req.reason, replyText, reporterId(uid))
     try {
@@ -225,6 +239,7 @@ private suspend fun ApplicationCall.handleReport(deps: ChatDeps) {
         throw e
     } catch (_: Exception) {
         deps.reportLimiter.release(uid)
+        deps.reportGlobalLimiter.release(GLOBAL_KEY)
         System.err.println("Could not store a reply report.")
         return respondError(HttpStatusCode.ServiceUnavailable, FriendlyErrors.UNAVAILABLE)
     }

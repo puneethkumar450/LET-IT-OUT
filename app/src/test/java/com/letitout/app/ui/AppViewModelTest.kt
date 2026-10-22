@@ -7,6 +7,7 @@ import com.letitout.app.data.ChatMessage
 import com.letitout.app.data.ChatReply
 import com.letitout.app.data.CheckInStats
 import com.letitout.app.data.Feeling
+import com.letitout.app.data.FriendlyException
 import com.letitout.app.data.Mood
 import com.letitout.app.data.ReminderSettings
 import com.letitout.app.data.ReportReason
@@ -79,8 +80,11 @@ class AppViewModelTest {
         override fun userName() = name
         override suspend fun signInGuest() { signedIn = true }
         override suspend fun signInGoogle(activity: Activity): Boolean = true
-        override suspend fun signOut() { signedIn = false }
-        override suspend fun deleteAccount() { signedIn = false }
+        var signOutFailure: Exception? = null
+        var deleteFailure: Exception? = null
+        // Like Firebase: signed out first, then the Google credential clean-up can still fail.
+        override suspend fun signOut() { signedIn = false; signOutFailure?.let { throw it } }
+        override suspend fun deleteAccount() { deleteFailure?.let { throw it }; signedIn = false }
     }
 
     private class FakeReminders : ReminderScheduler {
@@ -331,6 +335,54 @@ class AppViewModelTest {
 
         vm.chooseMood(Mood.TALK)
         assertNull(state.reportNotice)
+    }
+
+    @Test fun reportLimitShowsTheServersOwnSentence() {
+        val limit = "Thanks, we already have your recent reports. Please try again a little later."
+        chat.reportFailure = HttpException(Response.error<Any>(429, """{"error":"$limit"}""".toResponseBody("application/json".toMediaType())))
+        vm.reportReply("a reply", ReportReason.OTHER)
+        assertEquals(limit, state.reportNotice)
+    }
+
+    @Test fun signOutAlwaysClearsThisPhonesDataAndRefreshesAuth() {
+        vm.setReminder(true, 9, 0)
+        preferences.checkInStats.value = CheckInStats(3, 2)
+        vm.send("hi")
+        auth.signOutFailure = IllegalStateException("credential clean-up failed")
+        var done = 0
+        vm.signOut { done++ }
+        assertEquals(1, done)
+        assertFalse(state.signedIn)
+        assertEquals("cancel", reminders.events.last())
+        assertEquals(ReminderSettings(false, 9, 0), preferences.reminder.value)
+        assertEquals(1, preferences.clears)
+        assertTrue(state.messages.isEmpty())
+        assertFalse(state.loading)
+    }
+
+    @Test fun deleteAccountKeepsLocalDataUntilTheAccountIsGone() {
+        vm.setReminder(true, 9, 0)
+        val recentLogin = "For your security, please sign out, sign in again, and then delete your account."
+        auth.deleteFailure = FriendlyException(recentLogin)
+        var error: String? = null
+        var done = 0
+        vm.deleteAccount(onDone = { done++ }, onError = { error = it })
+        assertEquals(recentLogin, error)
+        assertEquals(0, done)
+        assertTrue(state.signedIn)
+        assertEquals(ReminderSettings(true, 9, 0), state.reminder)
+        assertEquals(0, preferences.clears)
+
+        auth.deleteFailure = null
+        vm.deleteAccount(onDone = { done++ }, onError = { error = it })
+        assertEquals(1, done)
+        assertFalse(state.signedIn)
+        assertEquals(ReminderSettings(false, 9, 0), state.reminder)
+        assertEquals(1, preferences.clears)
+    }
+
+    @Test fun guestDefaultsToFalseForGatewaysThatDontSayOtherwise() {
+        assertFalse(auth.isGuest())
     }
 
     @Test fun clearCheckInsResetsStats() {

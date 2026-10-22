@@ -35,6 +35,7 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
     override fun isSignedIn(): Boolean = isConfigured() && FirebaseAuth.getInstance().currentUser != null
     override fun userName(): String? =
         if (isConfigured()) FirebaseAuth.getInstance().currentUser?.displayName?.takeIf { it.isNotBlank() } else null
+    override fun isGuest(): Boolean = isConfigured() && FirebaseAuth.getInstance().currentUser?.isAnonymous == true
 
     override suspend fun signInGuest() {
         if (!isConfigured()) throw FriendlyException("Sign-in isn't set up in this build yet.")

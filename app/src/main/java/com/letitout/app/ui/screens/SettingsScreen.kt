@@ -40,7 +40,6 @@ import com.letitout.app.ui.AppViewModel
 import com.letitout.app.ui.BrandMark
 import com.letitout.app.ui.components.PageBackButton
 import com.letitout.app.ui.components.SettingsItem
-import kotlinx.coroutines.launch
 
 private val reminderTimes = listOf("9 AM" to 9, "2 PM" to 14, "8 PM" to 20, "10 PM" to 22)
 private const val NOTIFICATIONS_OFF =
@@ -52,21 +51,22 @@ private const val NOTIFICATIONS_DECLINED =
 internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> Unit, onAuth: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
-    // Re-checked on every return to the screen, so turning notifications off in phone settings shows up here.
+    // Re-checked on every return to the screen, so turning notifications off (or back on) in phone settings shows up here.
     var canPost by remember { mutableStateOf(ReminderNotifications.canPost(context)) }
     LifecycleResumeEffect(Unit) {
         canPost = ReminderNotifications.canPost(context)
+        if (canPost && (note == NOTIFICATIONS_OFF || note == NOTIFICATIONS_DECLINED)) note = null
         onPauseOrDispose { }
     }
     val signedIn = vm.auth.isSignedIn()
+    val guest = signedIn && vm.auth.isGuest()
     val enableReminder: () -> Unit = {
         vm.setReminder(true, state.reminder.hour, state.reminder.minute)
         canPost = ReminderNotifications.canPost(context)
-        note = if (canPost) null else NOTIFICATIONS_OFF
+        note = null // the "notifications are off" line below follows canPost on its own
     }
     val shownNote = note ?: if (state.reminder.enabled && !canPost) NOTIFICATIONS_OFF else null
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -96,9 +96,9 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
                 BrandMark(size = 52.dp)
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(if (signedIn) vm.auth.userName() ?: "Your account" else "Exploring in preview", color = AppColors.Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (guest) "Guest" else if (signedIn) vm.auth.userName() ?: "Your account" else "Exploring in preview", color = AppColors.Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(3.dp))
-                    Text(if (signedIn) "Signed in" else "No account connected", color = AppColors.Muted, fontSize = 13.sp)
+                    Text(if (guest) "Signed in as a guest" else if (signedIn) "Signed in" else "No account connected", color = AppColors.Muted, fontSize = 13.sp)
                 }
             }
         }
@@ -170,13 +170,15 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         SettingsItem(Icons.Default.Lock, "Privacy and support", "How this space works", onClick = onPrivacy)
         Spacer(Modifier.height(11.dp))
         if (signedIn) {
+            if (guest) {
+                // Upgrading keeps everything on this phone, unlike signing out.
+                SettingsItem(Icons.Default.AccountCircle, "Keep your space with Google", "Switch from guest to your Google account", onClick = onAuth)
+                Spacer(Modifier.height(11.dp))
+            }
             SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", "Clears check-ins and the reminder on this phone", onClick = {
-                scope.launch {
-                    status = ""
-                    // Check-ins and the reminder aren't tied to an account, so they go too, ready for whoever signs in next.
-                    try { vm.auth.signOut(); vm.clearLocalData(); vm.clearConversation(); vm.refreshAuth(); onAuth() }
-                    catch (t: Exception) { status = t.message ?: "Couldn't sign out just now. Please try again." }
-                }
+                status = ""
+                // Check-ins and the reminder aren't tied to an account, so they go too, ready for whoever signs in next.
+                vm.signOut(onDone = onAuth)
             })
             Spacer(Modifier.height(11.dp))
             SettingsItem(Icons.Default.Delete, "Delete my account", "Remove your sign-in account", destructive = true, onClick = { confirmDelete = true })
@@ -197,11 +199,8 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         text = { Text("This removes your sign-in account and the check-ins saved on this phone, and turns off the daily check-in. Conversations aren't stored on our server in this preview.") },
         confirmButton = { TextButton(onClick = {
             confirmDelete = false
-            scope.launch {
-                status = ""
-                try { vm.auth.deleteAccount(); vm.clearConversation(); vm.clearLocalData(); vm.refreshAuth(); onAuth() }
-                catch (t: Exception) { status = t.message ?: "Couldn't delete your account just now. Please sign in again and retry." }
-            }
+            status = ""
+            vm.deleteAccount(onDone = onAuth, onError = { status = it })
         }) { Text("Delete") } },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
     )

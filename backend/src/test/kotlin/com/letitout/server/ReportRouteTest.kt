@@ -9,6 +9,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -28,8 +29,9 @@ class ReportRouteTest {
     private fun deps(
         sink: ReportSink,
         verifyToken: (suspend (String) -> String?)? = verifier,
-        reportLimiter: RateLimiter = RateLimiter(20, hour)
-    ) = ChatDeps(verifyToken, provider = null, reportSink = sink, reportLimiter = reportLimiter)
+        reportLimiter: RateLimiter = RateLimiter(20, hour),
+        reportGlobalLimiter: RateLimiter = RateLimiter(300, hour)
+    ) = ChatDeps(verifyToken, provider = null, reportSink = sink, reportLimiter = reportLimiter, reportGlobalLimiter = reportGlobalLimiter)
 
     private fun reportJson(reason: String = "hurtful", replyText: String = "That reply felt dismissive.") =
         Json.encodeToString(ReportRequest.serializer(), ReportRequest(reason, replyText))
@@ -100,10 +102,25 @@ class ReportRouteTest {
         assertEquals(20, sink.saved.size)
     }
 
+    @Test fun overallCapStopsReportsFromEveryoneAndGivesThePersonalSlotBack() = testApplication {
+        var now = 0L
+        val sink = MemorySink()
+        val verifyAny: suspend (String) -> String? = { it }
+        val global = RateLimiter(2, hour) { now }
+        application { module(deps(sink, verifyToken = verifyAny, reportLimiter = RateLimiter(1, hour), reportGlobalLimiter = global)) }
+        assertEquals(HttpStatusCode.NoContent, report(reportJson(), token = "uid-a").status)
+        assertEquals(HttpStatusCode.NoContent, report(reportJson(), token = "uid-b").status)
+        report(reportJson(), token = "uid-c").assertFriendlyError(HttpStatusCode.TooManyRequests)
+        assertEquals(2, sink.saved.size)
+        // Once the overall window moves on, uid-c still has its own report left.
+        now = hour
+        assertEquals(HttpStatusCode.NoContent, report(reportJson(), token = "uid-c").status)
+    }
+
     @Test fun storageFailureReturns503AndGivesTheQuotaBack() = testApplication {
         val sink = MemorySink(failure = java.io.IOException("disk full"))
         val limiter = RateLimiter(1, hour)
-        application { module(deps(sink, reportLimiter = limiter)) }
+        application { module(deps(sink, reportLimiter = limiter, reportGlobalLimiter = RateLimiter(1, hour))) }
         report(reportJson()).assertFriendlyError(HttpStatusCode.ServiceUnavailable)
         sink.failure = null
         assertEquals(HttpStatusCode.NoContent, report(reportJson()).status)
@@ -119,5 +136,16 @@ class ReportRouteTest {
         val first = Json.decodeFromString(StoredReport.serializer(), lines[0])
         assertEquals("Line one\nwith a quote \"here\"", first.replyText)
         assertEquals("other", Json.decodeFromString(StoredReport.serializer(), lines[1]).reason)
+    }
+
+    @Test fun fileSinkStopsAtItsSizeCap() {
+        val file = File(Files.createTempDirectory("reports").toFile(), "reports.jsonl")
+        val report = StoredReport("2026-10-22T10:00:00Z", "wrong", "మీరు బాగున్నారా", "abc")
+        val lineBytes = (Json.encodeToString(StoredReport.serializer(), report) + "\n").toByteArray().size.toLong()
+        val sink = FileReportSink(file, maxBytes = lineBytes * 2)
+        sink.save(report)
+        sink.save(report)
+        assertFailsWith<java.io.IOException> { sink.save(report) }
+        assertEquals(lineBytes * 2, file.length())
     }
 }

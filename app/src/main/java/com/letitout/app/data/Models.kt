@@ -48,5 +48,24 @@ data class ChatRequest(val mood: String, val messages: List<ApiMessage>)
 data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
 data class ErrorBody(val error: String? = null)
 
+/**
+ * The body for `POST /v1/chat`: the opening question the app showed goes first, so the reply follows on from what they
+ * were asked; each message is trimmed to 2,000 characters, blanks are dropped, and only the last 12 are sent.
+ */
+internal fun chatRequestFor(mood: Mood, conversation: List<ChatMessage>): ChatRequest = ChatRequest(
+    mood.name,
+    (listOf(ApiMessage("assistant", mood.prompt)) + conversation
+        .map { it.copy(text = it.text.trim().take(2000)) }
+        .filter { it.text.isNotBlank() }
+        .map { ApiMessage(if (it.fromUser) "user" else "assistant", it.text) })
+        .takeLast(12)
+)
+
+internal fun ChatResponse.toChatReply(): ChatReply {
+    val text = reply.trim()
+    if (text.isEmpty()) throw FriendlyException("I couldn't put a reply together just now. Mind trying again?")
+    return ChatReply(text, safetyState == "SUPPORT_SUGGESTED")
+}
+
 /** Body of `POST /v1/report`: why the person flagged a reply, and that reply (at most 2,000 chars). */
 data class ReportRequest(val reason: String, val replyText: String)

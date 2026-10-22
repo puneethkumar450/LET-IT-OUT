@@ -80,6 +80,7 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
     var speechEnabled by remember { mutableStateOf(false) }
     var askFeeling by remember { mutableStateOf(false) }
     var heavierStep by remember { mutableStateOf(false) }
+    var clearAfterCheck by remember { mutableStateOf(false) } // the feeling check was opened by Clear, not by leaving
     var reportTarget by remember { mutableStateOf<String?>(null) }
     val tts = remember { TextToSpeech(context) { result -> speechEnabled = result == TextToSpeech.SUCCESS } }
     DisposableEffect(tts) { onDispose { tts.stop(); tts.shutdown() } }
@@ -122,6 +123,9 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
     // That includes leaving while the second reply is still on its way, which would otherwise skip the question.
     val checkDue = state.feelingCheckDue || (state.loading && state.messages.count { !it.fromUser } >= 1)
     val leaveChat: () -> Unit = { if (checkDue) askFeeling = true else onBack() }
+    val clearChat: () -> Unit = { vm.clearConversation(); tts.stop(); speechError = null }
+    // Clearing also ends a conversation, so it gets the same question first and then stays on this screen.
+    val afterCheck: () -> Unit = { if (clearAfterCheck) { clearAfterCheck = false; clearChat() } else onBack() }
     BackHandler(enabled = checkDue) { askFeeling = true }
     LaunchedEffect(state.messages.size, state.loading) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size + if (state.loading) 1 else 0)
@@ -140,7 +144,7 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
                     Text("${state.mood.label} space", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
                     Text(if (state.loading) "Listening…" else "AI companion · Take your time", fontSize = 12.sp, color = if (state.loading) palette.primary else AppColors.Muted)
                 }
-                IconButton(onClick = { vm.clearConversation(); tts.stop(); speechError = null }, modifier = Modifier.background(AppColors.PrimarySoft, CircleShape)) {
+                IconButton(onClick = { if (checkDue) { clearAfterCheck = true; askFeeling = true } else clearChat() }, modifier = Modifier.background(AppColors.PrimarySoft, CircleShape)) {
                     Icon(Icons.Default.Delete, "Clear this conversation", tint = AppColors.Primary, modifier = Modifier.size(20.dp))
                 }
             }
@@ -278,10 +282,10 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
             askFeeling = false
             if (feeling == null) vm.skipFeelingCheck() else vm.recordFeeling(feeling)
             // "Heavier" gets a short, kind word before leaving instead of silence.
-            if (feeling == Feeling.HEAVIER) heavierStep = true else onBack()
+            if (feeling == Feeling.HEAVIER) heavierStep = true else afterCheck()
         }
         AlertDialog(
-            onDismissRequest = { askFeeling = false },
+            onDismissRequest = { askFeeling = false; clearAfterCheck = false },
             containerColor = AppColors.Card,
             shape = RoundedCornerShape(26.dp),
             title = { Text("How are you feeling now?", color = AppColors.Ink, fontWeight = FontWeight.SemiBold) },
@@ -298,7 +302,7 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
         )
     }
     if (heavierStep) {
-        val leave: () -> Unit = { heavierStep = false; onBack() }
+        val leave: () -> Unit = { heavierStep = false; afterCheck() }
         AlertDialog(
             onDismissRequest = leave,
             containerColor = AppColors.Card,
@@ -310,13 +314,12 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
                         "Some talks stir things up before they settle, and that's okay. Come back whenever you want to talk it through.",
                         color = AppColors.Ink, fontSize = 14.sp, lineHeight = 20.sp
                     )
-                    if (state.supportOffered) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "If it's been heavy for a while, talking to a doctor really is the best option. Tele-MANAS ($TELE_MANAS_NUMBER) is free and open 24x7.",
-                            color = AppColors.Ink, fontSize = 14.sp, lineHeight = 20.sp
-                        )
-                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        if (state.supportOffered) "If it's been heavy for a while, talking to a doctor really is the best option. Tele-MANAS ($TELE_MANAS_NUMBER) is free and open 24x7."
+                        else "If this heaviness keeps coming back, talking to a doctor really is the best option.",
+                        color = AppColors.Ink, fontSize = 14.sp, lineHeight = 20.sp
+                    )
                 }
             },
             confirmButton = { TextButton(onClick = leave) { Text("Okay") } },

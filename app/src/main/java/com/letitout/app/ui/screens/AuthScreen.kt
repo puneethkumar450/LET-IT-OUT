@@ -54,17 +54,20 @@ internal fun AuthScreen(vm: AppViewModel, onBack: () -> Unit, onContinue: () -> 
                 }
             }, enabled = !working && configured, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)
         ) { Icon(Icons.Default.AccountCircle, null); Spacer(Modifier.width(10.dp)); Text("Continue with Google", fontWeight = FontWeight.SemiBold) }
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(
-            onClick = {
-                scope.launch {
-                    working = true; error = null
-                    try { vm.auth.signInGuest(); vm.refreshAuth(); onContinue() }
-                    catch (t: Exception) { error = t.message ?: "Couldn't start a guest session just now. Please try again." }
-                    finally { working = false }
-                }
-            }, enabled = !working && configured, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)
-        ) { Text("Continue as guest", fontWeight = FontWeight.SemiBold) }
+        // A guest arriving from Settings is here to switch to Google, so don't offer a second guest session.
+        if (!vm.auth.isGuest()) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        working = true; error = null
+                        try { vm.auth.signInGuest(); vm.refreshAuth(); onContinue() }
+                        catch (t: Exception) { error = t.message ?: "Couldn't start a guest session just now. Please try again." }
+                        finally { working = false }
+                    }
+                }, enabled = !working && configured, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)
+            ) { Text("Continue as guest", fontWeight = FontWeight.SemiBold) }
+        }
         Spacer(Modifier.height(12.dp))
         FilledTonalButton(onClick = onContinue, enabled = !working, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) {
             Text("Explore in preview", fontWeight = FontWeight.SemiBold)

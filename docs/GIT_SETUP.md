@@ -9,13 +9,13 @@ The GitHub repository exists and has history. `git ls-remote origin` shows two b
 - `main` at `2261c65`, "Redesign Android UI and fix Back navigation".
 - `ui-changes` at `2d84981`: three commits on top of that `main`. They are the lavender redesign (`729410a`), mood stickers and the Firebase connection (`3acaf10`), and local release signing with Firebase fingerprints (`2d84981`), plus README and `docs/FIREBASE_SETUP.md` updates.
 
-The human-companion work (persona, gentle support card, feeling check, daily check-in, backend split and tests) is on the local branch `claude/human-companion-fixes`. It starts from `main` (`2261c65`) and holds commit `8283936` plus further uncommitted changes. **It has not been pushed**, and it does not include `ui-changes`.
+The human-companion work (persona, gentle support card, feeling check, daily check-in, backend split and tests) is on the local branch `claude/human-companion-fixes`. It starts from `main` (`2261c65`). **It has not been pushed**, and it does not include `ui-changes`; the two branches change many of the same Android files, so one has to be ported onto the other.
 
 **Expect conflicts when you bring the two lines of work together.**
 
 - Both split `MainActivity.kt` into screen files, but differently: `ui/ChatScreen.kt`, `ui/HomeScreens.kt`, `ui/IntroScreens.kt`, `ui/SettingsScreens.kt` and `ui/Components.kt` on `ui-changes`, versus `ui/screens/*.kt` and `ui/components/Common.kt` here.
 - Both also change `AuthManager.kt`, `Models.kt`, `AppViewModel.kt`, `ChatApi.kt`, `Preferences.kt`, `AppVisuals.kt`, `AndroidManifest.xml`, `app/build.gradle.kts`, the backend `Main.kt` and the README.
-- `ui-changes` has a support card with a 112 dial button for flagged replies, plus an optional intensity rating sent to the backend. The owner's later decision replaces that card with the gentle doctor / Tele-MANAS card: no crisis mode, and 112 only on the help page.
+- `ui-changes` has a support card with a 112 dial button for flagged replies, plus an optional intensity rating sent to the backend. The owner's later decision replaces that card with the gentle doctor / Tele-MANAS card: no crisis mode, and 112 only on the help page and, at the model's judgement, in the extra-care prompt (see [SAFETY.md](SAFETY.md)).
 
 Merge by hand and review each conflict; do not resolve by taking one side wholesale. After merging, rebuild and rerun both test suites (see the README).
 

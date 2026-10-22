@@ -3,6 +3,7 @@ package com.letitout.server
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 
 @Serializable data class ReportRequest(val reason: String, val replyText: String)
@@ -14,15 +15,28 @@ internal val reportReasons = setOf("hurtful", "unsafe", "wrong", "other")
 
 fun interface ReportSink { fun save(report: StoredReport) }
 
-/** Appends one JSON line per report. Point REPORTS_FILE at durable, access-controlled storage in production. */
-class FileReportSink(private val file: File) : ReportSink {
+/**
+ * Appends one JSON line per report and stops (throws) once the file would pass [maxBytes]. Point REPORTS_FILE at durable,
+ * access-controlled storage in production.
+ */
+class FileReportSink(private val file: File, private val maxBytes: Long = DEFAULT_MAX_BYTES) : ReportSink {
     private val json = Json { encodeDefaults = true }
     override fun save(report: StoredReport) {
-        val line = json.encodeToString(StoredReport.serializer(), report) + "\n"
+        val bytes = (json.encodeToString(StoredReport.serializer(), report) + "\n").toByteArray()
         synchronized(this) {
             file.absoluteFile.parentFile?.mkdirs()
-            file.appendText(line)
+            if (file.length() + bytes.size > maxBytes) throw IOException("reports file full")
+            file.appendBytes(bytes)
         }
+    }
+
+    companion object {
+        const val DEFAULT_MAX_BYTES = 50L * 1024 * 1024
+
+        fun fromEnvironment(env: (String) -> String? = System::getenv): FileReportSink = FileReportSink(
+            File(env("REPORTS_FILE")?.takeIf { it.isNotBlank() } ?: "reports.jsonl"),
+            env("REPORTS_MAX_BYTES")?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: DEFAULT_MAX_BYTES
+        )
     }
 }
 

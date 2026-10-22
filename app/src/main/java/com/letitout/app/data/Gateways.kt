@@ -7,6 +7,8 @@ interface AuthGateway {
     fun isConfigured(): Boolean
     fun isSignedIn(): Boolean
     fun userName(): String?
+    /** True for an anonymous guest, who can upgrade to Google without losing anything on this phone. */
+    fun isGuest(): Boolean = false
     suspend fun signInGuest()
     /** Returns true when signed in, false when the person closed the account picker. Throws [FriendlyException]. */
     suspend fun signInGoogle(activity: Activity): Boolean

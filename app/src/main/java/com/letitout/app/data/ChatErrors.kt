@@ -33,6 +33,16 @@ fun friendlyMessage(t: Throwable): String = when (t) {
     else -> FALLBACK
 }
 
+/**
+ * For a failed reply report: the specific sentence when it tells the person something useful (signed out, sign-in needs a
+ * refresh, or the hourly report limit), otherwise null so the caller can use its own "try again" note.
+ */
+fun reportFailureMessage(t: Throwable): String? = when {
+    t is FriendlyException -> friendlyMessage(t)
+    t is HttpException && t.code() in setOf(401, 403, 429) -> friendlyMessage(t)
+    else -> null
+}
+
 private fun httpMessage(e: HttpException): String = when (val code = e.code()) {
     401, 403 -> "Your sign-in needs a refresh. Please sign out and sign in again, then we can keep talking."
     413 -> "That was a lot to send in one go. Could you try a shorter message?"
