@@ -3,13 +3,13 @@ package com.letitout.app.data
 import androidx.compose.ui.graphics.Color
 
 enum class Mood(val label: String, val detail: String, val prompt: String) {
-    ANGRY("Angry", "Let it out", "What happened today? I'm listening."),
-    SAD("Sad", "Take your time", "Would you like to tell me what's weighing on you?"),
-    STRESSED("Stressed", "One thing at a time", "What's feeling overwhelming right now?"),
-    ANXIOUS("Anxious", "Find some ground", "What's on your mind? We can take it one thing at a time."),
-    LONELY("Lonely", "You can talk here", "I'm here to listen. What would you like to talk about?"),
-    HAPPY("Happy", "Share the good", "I'd love to hear what's going well!"),
-    TALK("Just talk", "No label needed", "Hey, what's going on?")
+    ANGRY("Angry", "Let it out", "Sounds like something really got to you. What happened? Say it however it comes out."),
+    SAD("Sad", "Take your time", "Hey, I'm glad you came. What's been weighing on you? Start wherever feels easiest."),
+    STRESSED("Stressed", "One thing at a time", "That sounds like a lot to carry. What's taking up the most space in your head right now?"),
+    ANXIOUS("Anxious", "Find some ground", "I'm right here with you. What's got your mind racing? We can untangle it slowly."),
+    LONELY("Lonely", "You can talk here", "Really glad you're here. How has your day actually been?"),
+    HAPPY("Happy", "Share the good", "Ooh, I like this already. Tell me everything, what's the good news?"),
+    TALK("Just talk", "No label needed", "Hey, good to see you. What's on your mind today?")
 }
 
 data class MoodPalette(val background: Color, val primary: Color, val accent: Color)
@@ -26,6 +26,16 @@ fun Mood.palette() = when (this) {
 
 data class ChatMessage(val id: Long, val text: String, val fromUser: Boolean)
 
+enum class Feeling { LIGHTER, SAME, HEAVIER }
+
+/** Summary of the last 10 "How are you feeling now?" answers, kept on the phone only. */
+data class CheckInStats(val total: Int = 0, val lighter: Int = 0)
+
+data class ReminderSettings(val enabled: Boolean = false, val hour: Int = 20, val minute: Int = 0)
+
+data class ChatReply(val text: String, val supportSuggested: Boolean)
+
 data class ApiMessage(val role: String, val content: String)
 data class ChatRequest(val mood: String, val messages: List<ApiMessage>)
 data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
+data class ErrorBody(val error: String? = null)
