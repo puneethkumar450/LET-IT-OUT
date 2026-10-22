@@ -49,7 +49,7 @@ internal fun HomeScreen(vm: AppViewModel, onChoose: (Mood) -> Unit, onSettings: 
         Text("How are you\nfeeling today?", fontSize = 36.sp, lineHeight = 41.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
         Spacer(Modifier.height(11.dp))
         Text("Choose what feels closest. You can change your mind anytime.", color = AppColors.Muted, fontSize = 15.sp, lineHeight = 22.sp)
-        if (state.checkInStats.total > 0) {
+        if (state.signedIn && state.checkInStats.total > 0) {
             Spacer(Modifier.height(22.dp))
             InsightCard(state.checkInStats)
         }
@@ -91,10 +91,13 @@ private fun greetingFor(hour: Int, name: String?): String {
     }
 }
 
+// Encouraging, never a score: a low ratio gets a gentle line instead of "1 of your last 9".
 private fun insightText(stats: CheckInStats): String = when {
     stats.lighter == 0 -> "Some talks take a while to settle, and that's okay. This space is here whenever you need it."
     stats.total == 1 -> "You felt lighter after your last talk."
-    else -> "You felt lighter after ${stats.lighter} of your last ${stats.total} talks."
+    stats.lighter == stats.total -> "You felt lighter after each of your last ${stats.total} talks."
+    stats.lighter * 2 >= stats.total -> "You felt lighter after ${stats.lighter} of your last ${stats.total} talks."
+    else -> "Some of your talks here have left you feeling lighter. Whatever today brings, you can talk it through."
 }
 
 @Composable

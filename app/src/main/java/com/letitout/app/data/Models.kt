@@ -35,7 +35,18 @@ data class ReminderSettings(val enabled: Boolean = false, val hour: Int = 20, va
 
 data class ChatReply(val text: String, val supportSuggested: Boolean)
 
+/** Why someone flagged a reply. [slug] is what the backend receives. */
+enum class ReportReason(val label: String, val slug: String) {
+    HURTFUL("Hurtful or offensive", "hurtful"),
+    UNSAFE("Advice that could cause harm", "unsafe"),
+    WRONG("Wrong or made up", "wrong"),
+    OTHER("Something else", "other")
+}
+
 data class ApiMessage(val role: String, val content: String)
 data class ChatRequest(val mood: String, val messages: List<ApiMessage>)
 data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
 data class ErrorBody(val error: String? = null)
+
+/** Body of `POST /v1/report`: why the person flagged a reply, and that reply (at most 2,000 chars). */
+data class ReportRequest(val reason: String, val replyText: String)

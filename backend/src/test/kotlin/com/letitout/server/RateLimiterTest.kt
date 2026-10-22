@@ -33,6 +33,24 @@ class RateLimiterTest {
         assertEquals(1, limiter.trackedKeys)
     }
 
+    @Test fun releaseGivesBackTheLatestHit() {
+        var now = 0L
+        val limiter = RateLimiter(2, 1_000) { now }
+        assertTrue(limiter.tryAcquire("a"))
+        now = 100
+        assertTrue(limiter.tryAcquire("a"))
+        assertFalse(limiter.tryAcquire("a"))
+        limiter.release("a")
+        assertTrue(limiter.tryAcquire("a"))
+        assertFalse(limiter.tryAcquire("a"))
+        limiter.release("a")
+        limiter.release("a")
+        assertEquals(0, limiter.trackedKeys)
+        limiter.release("a")
+        limiter.release("never-seen")
+        assertEquals(0, limiter.trackedKeys)
+    }
+
     @Test fun zeroLimitNeverStoresKeys() {
         val limiter = RateLimiter(0, 1_000) { 0L }
         assertFalse(limiter.tryAcquire("a"))

@@ -70,6 +70,6 @@ internal fun WelcomeScreen(onStart: () -> Unit) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
         }
         Spacer(Modifier.height(15.dp))
-        Text("For adults 18+ · Not a replacement for a doctor or professional care", modifier = Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center)
+        Text("An AI companion for adults 18+ · Not a replacement for a doctor or professional care", modifier = Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center)
     }
 }

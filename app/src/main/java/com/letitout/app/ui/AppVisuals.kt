@@ -26,7 +26,7 @@ object AppColors {
     val Canvas = Color(0xFFF7F6F2)
     val Card = Color(0xFFFFFEFB)
     val Ink = Color(0xFF203A35)
-    val Muted = Color(0xFF71817A)
+    val Muted = Color(0xFF5E6D67) // ≥4.5:1 on Card, Canvas, PrimarySoft and Warm for small text
     val Primary = Color(0xFF276759)
     val PrimarySoft = Color(0xFFE7F0EA)
     val Line = Color(0xFFDCE5DE)

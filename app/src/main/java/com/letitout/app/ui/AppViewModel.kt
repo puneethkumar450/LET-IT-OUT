@@ -9,6 +9,7 @@ import com.letitout.app.data.CheckInStats
 import com.letitout.app.data.Feeling
 import com.letitout.app.data.Mood
 import com.letitout.app.data.ReminderSettings
+import com.letitout.app.data.ReportReason
 import com.letitout.app.data.UserPreferences
 import com.letitout.app.data.friendlyMessage
 import com.letitout.app.reminder.ReminderScheduler
@@ -38,7 +39,9 @@ class AppViewModel @Inject constructor(
         val signedIn: Boolean = false,
         val userName: String? = null,
         val supportSuggested: Boolean = false,
+        val supportOffered: Boolean = false,    // the support card was shown at some point in this conversation
         val feelingCheckDue: Boolean = false,
+        val reportNotice: String? = null,       // "thanks" (or "couldn't send") after flagging a reply
         val checkInStats: CheckInStats = CheckInStats(),
         val reminder: ReminderSettings = ReminderSettings()
     )
@@ -50,7 +53,8 @@ class AppViewModel @Inject constructor(
     // Each new conversation bumps the generation; replies from an older one are dropped.
     private var generation = 0
     private var replyJob: Job? = null
-    private var supportDismissed = false
+    // Companion-reply count when "Not now" was tapped; -1 = not dismissed in this conversation.
+    private var dismissedAtReplyCount = -1
     private var feelingAnswered = false
 
     init {
@@ -89,9 +93,27 @@ class AppViewModel @Inject constructor(
     fun dismissError() = _state.update { it.copy(error = null) }
 
     fun dismissSupport() {
-        supportDismissed = true
+        dismissedAtReplyCount = _state.value.messages.count { !it.fromUser }
         _state.update { it.copy(supportSuggested = false) }
     }
+
+    /** Sends a reply the person flagged, then shows a short thank-you (or a gentle retry note). */
+    fun reportReply(replyText: String, reason: ReportReason) {
+        val requestGeneration = generation
+        viewModelScope.launch {
+            val notice = try {
+                chat.report(reason, replyText)
+                REPORT_THANKS
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (t: Exception) {
+                REPORT_FAILED
+            }
+            if (requestGeneration == generation) _state.update { it.copy(reportNotice = notice) }
+        }
+    }
+
+    fun dismissReportNotice() = _state.update { it.copy(reportNotice = null) }
 
     fun recordFeeling(feeling: Feeling) {
         if (feelingAnswered) return
@@ -114,14 +136,24 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.clearCheckIns() }
     }
 
+    /** On sign-out or account deletion: turn off the daily check-in and clear check-ins kept on this phone. */
+    fun clearLocalData() {
+        val reminder = _state.value.reminder
+        setReminder(false, reminder.hour, reminder.minute)
+        clearCheckIns()
+    }
+
     private fun startNewConversation(mood: Mood) {
         generation++
         replyJob?.cancel()
         replyJob = null
-        supportDismissed = false
+        dismissedAtReplyCount = -1
         feelingAnswered = false
         _state.update {
-            it.copy(mood = mood, messages = emptyList(), loading = false, error = null, supportSuggested = false, feelingCheckDue = false)
+            it.copy(
+                mood = mood, messages = emptyList(), loading = false, error = null,
+                supportSuggested = false, supportOffered = false, feelingCheckDue = false, reportNotice = null
+            )
         }
     }
 
@@ -141,11 +173,16 @@ class AppViewModel @Inject constructor(
                 val answer = ChatMessage(nextId++, reply.text, false)
                 _state.update {
                     val messages = it.messages + answer
+                    val replies = messages.count { message -> !message.fromUser }
+                    // After "Not now" the card stays away for a few replies, but comes back if things still sound heavy.
+                    val showSupport = it.supportSuggested || (reply.supportSuggested &&
+                        (dismissedAtReplyCount < 0 || replies - dismissedAtReplyCount >= SUPPORT_RESHOW_AFTER))
                     it.copy(
                         messages = messages,
                         loading = false,
-                        supportSuggested = it.supportSuggested || (reply.supportSuggested && !supportDismissed),
-                        feelingCheckDue = !feelingAnswered && messages.count { message -> !message.fromUser } >= 2
+                        supportSuggested = showSupport,
+                        supportOffered = it.supportOffered || showSupport,
+                        feelingCheckDue = !feelingAnswered && replies >= 2
                     )
                 }
             } catch (cancel: CancellationException) {
@@ -155,5 +192,11 @@ class AppViewModel @Inject constructor(
                 _state.update { it.copy(loading = false, error = friendlyMessage(t)) }
             }
         }
+    }
+
+    private companion object {
+        const val SUPPORT_RESHOW_AFTER = 4
+        const val REPORT_THANKS = "Thanks for telling us. It helps us make this space better."
+        const val REPORT_FAILED = "Couldn't send that just now. Please try again in a moment."
     }
 }

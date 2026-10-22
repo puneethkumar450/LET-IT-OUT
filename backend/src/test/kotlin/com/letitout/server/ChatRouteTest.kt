@@ -3,7 +3,9 @@ package com.letitout.server
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.server.testing.*
+import io.ktor.utils.io.*
 import kotlinx.serialization.json.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,8 +22,9 @@ class ChatRouteTest {
         provider: ReplyProvider? = FakeProvider(),
         verifyToken: (suspend (String) -> String?)? = verifier,
         limiter: RateLimiter = RateLimiter(20, hour),
-        careLimiter: RateLimiter = RateLimiter(30, hour)
-    ) = ChatDeps(verifyToken, provider, limiter, careLimiter)
+        careLimiter: RateLimiter = RateLimiter(30, hour),
+        globalLimiter: RateLimiter = RateLimiter(60, 60_000)
+    ) = ChatDeps(verifyToken, provider, limiter, careLimiter, globalLimiter)
 
     private fun chatJson(mood: String, messages: List<Message>) =
         Json.encodeToString(ChatRequest.serializer(), ChatRequest(mood, messages))
@@ -77,9 +80,11 @@ class ChatRouteTest {
         assertTrue(provider.calls.isEmpty())
     }
 
-    @Test fun throwingVerifierReturns401() = testApplication {
-        application { module(deps(verifyToken = { throw IllegalStateException("expired") })) }
-        chat(says("hi")).assertFriendlyError(HttpStatusCode.Unauthorized)
+    @Test fun throwingVerifierReturns503NotSignOut() = testApplication {
+        val provider = FakeProvider()
+        application { module(deps(provider, verifyToken = { throw IllegalStateException("public keys unavailable") })) }
+        assertEquals(FriendlyErrors.UNAVAILABLE, chat(says("hi")).assertFriendlyError(HttpStatusCode.ServiceUnavailable))
+        assertTrue(provider.calls.isEmpty())
     }
 
     @Test fun bodyJustOverLimitReturns413() = testApplication {
@@ -89,6 +94,29 @@ class ChatRouteTest {
         val oversized = valid.dropLast(1) + " ".repeat(MAX_BODY_CHARS + 1 - valid.length) + "}"
         assertEquals(MAX_BODY_CHARS + 1, oversized.length)
         chat(oversized).assertFriendlyError(HttpStatusCode.PayloadTooLarge)
+        assertTrue(provider.calls.isEmpty())
+    }
+
+    @Test fun bodyOverByteCapWithContentLengthReturns413() = testApplication {
+        val provider = FakeProvider()
+        application { module(deps(provider)) }
+        chat(" ".repeat(300_000)).assertFriendlyError(HttpStatusCode.PayloadTooLarge)
+        assertTrue(provider.calls.isEmpty())
+    }
+
+    @Test fun streamedBodyOverByteCapReturns413() = testApplication {
+        val provider = FakeProvider()
+        application { module(deps(provider)) }
+        val response = client.post("/v1/chat") {
+            header(HttpHeaders.Authorization, "Bearer $goodToken")
+            setBody(object : OutgoingContent.WriteChannelContent() {
+                override val contentType = ContentType.Application.Json
+                override suspend fun writeTo(channel: ByteWriteChannel) {
+                    channel.writeFully(ByteArray(300_000) { ' '.code.toByte() })
+                }
+            })
+        }
+        response.assertFriendlyError(HttpStatusCode.PayloadTooLarge)
         assertTrue(provider.calls.isEmpty())
     }
 
@@ -159,13 +187,23 @@ class ChatRouteTest {
         assertEquals(3, provider.calls.size)
     }
 
-    @Test fun exhaustedCareLimiterGivesFallbackWithoutProvider() = testApplication {
+    @Test fun heavyTurnsBorrowNormalQuotaThenGetFallbackWithoutProvider() = testApplication {
         val provider = FakeProvider()
-        application { module(deps(provider, careLimiter = RateLimiter(1, hour))) }
-        chat(says(heavy)).assertReply(SUPPORT_SUGGESTED)
+        application { module(deps(provider, limiter = RateLimiter(1, hour), careLimiter = RateLimiter(1, hour))) }
+        assertEquals(provider.reply, chat(says(heavy)).assertReply(SUPPORT_SUGGESTED))
+        assertEquals(provider.reply, chat(says(heavy)).assertReply(SUPPORT_SUGGESTED))
         val reply = chat(says(heavy)).assertReply(SUPPORT_SUGGESTED)
         assertTrue(reply in Persona.supportFallbackReplies)
-        assertEquals(1, provider.calls.size)
+        assertEquals(2, provider.calls.size)
+        chat(says("thanks")).assertFriendlyError(HttpStatusCode.TooManyRequests)
+    }
+
+    @Test fun fallbackDoesNotRepeatTheLastOne() = testApplication {
+        application { module(deps(limiter = RateLimiter(0, hour), careLimiter = RateLimiter(0, hour))) }
+        val first = chat(says(heavy)).assertReply(SUPPORT_SUGGESTED)
+        val convo = chatJson("SAD", listOf(Message("user", heavy), Message("assistant", first), Message("user", heavy)))
+        val second = chat(convo).assertReply(SUPPORT_SUGGESTED)
+        assertTrue(second in Persona.supportFallbackReplies && second != first)
     }
 
     @Test fun providerFailureOnHeavyTurnGivesFallback() = testApplication {
@@ -174,6 +212,29 @@ class ChatRouteTest {
         assertTrue(chat(says(heavy)).assertReply(SUPPORT_SUGGESTED) in Persona.supportFallbackReplies)
         provider.failure = ProviderRateLimited()
         assertTrue(chat(says("I want to die")).assertReply(SUPPORT_SUGGESTED) in Persona.supportFallbackReplies)
+    }
+
+    @Test fun failedProviderCallsGiveTheirQuotaBack() = testApplication {
+        val provider = FakeProvider(failure = ProviderUnavailable())
+        application { module(deps(provider)) }
+        repeat(20) { chat(says("hi $it")).assertFriendlyError(HttpStatusCode.BadGateway) }
+        provider.failure = ProviderRateLimited()
+        chat(says("hi")).assertFriendlyError(HttpStatusCode.TooManyRequests).let { assertEquals(FriendlyErrors.BUSY, it) }
+        provider.failure = null
+        chat(says("hi again")).assertReply(NORMAL)
+    }
+
+    @Test fun globalCapStopsProviderCallsAndReturnsTheSlot() = testApplication {
+        var now = 0L
+        val provider = FakeProvider()
+        application { module(deps(provider, limiter = RateLimiter(2, hour), globalLimiter = RateLimiter(1, 60_000) { now })) }
+        chat(says("hi")).assertReply(NORMAL)
+        assertEquals(FriendlyErrors.BUSY, chat(says("hi again")).assertFriendlyError(HttpStatusCode.TooManyRequests))
+        assertTrue(chat(says(heavy)).assertReply(SUPPORT_SUGGESTED) in Persona.supportFallbackReplies)
+        assertEquals(1, provider.calls.size)
+        now = 60_000
+        chat(says("back now")).assertReply(NORMAL)
+        assertEquals(2, provider.calls.size)
     }
 
     @Test fun providerFailureOnNormalTurnReturns502() = testApplication {
@@ -196,6 +257,48 @@ class ChatRouteTest {
         application { module(deps(provider)) }
         chat(says("I haven't slept properly in weeks")).assertReply(SUPPORT_SUGGESTED)
         assertEquals(Persona.systemPrompt("SAD", extraCare = false), provider.calls.single().first)
+    }
+
+    @Test fun echoingADoctorInAHappyChatStaysNormal() = testApplication {
+        val provider = FakeProvider(reply = "Arre wah! Your sister's a doctor now, that's huge. How are you all celebrating?")
+        application { module(deps(provider)) }
+        chat(says("My sister just finished MBBS, she's officially a doctor!!", "HAPPY")).assertReply(NORMAL)
+        provider.reply = "Hope the doctor's appointment goes okay. What's worrying you most about it?"
+        chat(says("I have a doctor's appointment tomorrow", "ANXIOUS")).assertReply(NORMAL)
+    }
+
+    @Test fun recentHelplineMentionKeepsExtraCare() = testApplication {
+        val provider = FakeProvider()
+        application { module(deps(provider, limiter = RateLimiter(0, hour))) }
+        val convo = chatJson("SAD", listOf(
+            Message("user", "everything feels pointless"),
+            Message("assistant", "I'm glad you told me. Tele-MANAS on 14416 is free, 24x7, and I'm still here."),
+            Message("user", "ok")
+        ))
+        chat(convo).assertReply(SUPPORT_SUGGESTED)
+        assertEquals(Persona.systemPrompt("SAD", extraCare = true), provider.calls.single().first)
+    }
+
+    @Test fun alarmingReplyOnHeavyTurnBecomesGentleFallback() = testApplication {
+        val provider = FakeProvider(reply = "If you are in immediate danger, please call the emergency number 112.")
+        application { module(deps(provider)) }
+        val reply = chat(says(heavy)).assertReply(SUPPORT_SUGGESTED)
+        assertTrue(reply in Persona.supportFallbackReplies)
+        assertNoBannedWords(reply)
+        assertEquals(1, provider.calls.size)
+    }
+
+    @Test fun alarmingReplyOnNormalTurnIsRewrittenOnce() = testApplication {
+        val provider = FakeProvider(reply = "Ugh, work drama again? What happened this time?")
+        provider.queued += "Ugh, another crisis at work? What happened this time?"
+        application { module(deps(provider)) }
+        assertEquals("Ugh, work drama again? What happened this time?", chat(says("There's a crisis at work", "STRESSED")).assertReply(NORMAL))
+        assertEquals(2, provider.calls.size)
+        assertEquals(Persona.systemPrompt("STRESSED", extraCare = false) + "\n\n" + Persona.rewriteNudge, provider.calls[1].first)
+        // A rewrite that still slips is sent anyway rather than an error.
+        provider.reply = "That deadline sounds like a crisis."
+        assertEquals("That deadline sounds like a crisis.", chat(says("deadline tomorrow", "STRESSED")).assertReply(NORMAL))
+        assertEquals(4, provider.calls.size)
     }
 
     @Test fun careCheckReadsOnlyTheLastThreeUserMessages() = testApplication {

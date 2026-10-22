@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,12 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.reminder.ReminderNotifications
 import com.letitout.app.ui.AppColors
@@ -52,11 +56,19 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
     var status by remember { mutableStateOf("") }
     var note by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Re-checked on every return to the screen, so turning notifications off in phone settings shows up here.
+    var canPost by remember { mutableStateOf(ReminderNotifications.canPost(context)) }
+    LifecycleResumeEffect(Unit) {
+        canPost = ReminderNotifications.canPost(context)
+        onPauseOrDispose { }
+    }
     val signedIn = vm.auth.isSignedIn()
     val enableReminder: () -> Unit = {
         vm.setReminder(true, state.reminder.hour, state.reminder.minute)
-        note = if (ReminderNotifications.canPost(context)) null else NOTIFICATIONS_OFF
+        canPost = ReminderNotifications.canPost(context)
+        note = if (canPost) null else NOTIFICATIONS_OFF
     }
+    val shownNote = note ?: if (state.reminder.enabled && !canPost) NOTIFICATIONS_OFF else null
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) enableReminder() else note = NOTIFICATIONS_DECLINED
     }
@@ -95,7 +107,11 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         Spacer(Modifier.height(13.dp))
         Surface(color = AppColors.Card, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, AppColors.Line)) {
             Column(Modifier.fillMaxWidth().padding(15.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // The whole row is the switch, so TalkBack reads "Daily check-in" with its on/off state.
+                Row(
+                    Modifier.fillMaxWidth().toggleable(value = state.reminder.enabled, role = Role.Switch, onValueChange = onReminderToggle),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(Modifier.size(46.dp).background(AppColors.PrimarySoft, RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Notifications, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(22.dp))
                     }
@@ -107,7 +123,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
                     Spacer(Modifier.width(10.dp))
                     Switch(
                         checked = state.reminder.enabled,
-                        onCheckedChange = onReminderToggle,
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = AppColors.Primary,
                             uncheckedTrackColor = AppColors.PrimarySoft,
@@ -127,7 +143,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
                             onClick = { vm.setReminder(state.reminder.enabled, hour, 0) },
                             color = if (isSelected) AppColors.Primary else AppColors.PrimarySoft,
                             shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.weight(1f).semantics { selected = isSelected }
+                            modifier = Modifier.weight(1f).semantics { selected = isSelected; role = Role.RadioButton }
                         ) {
                             Text(
                                 label,
@@ -142,7 +158,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
                 }
             }
         }
-        note?.let { Spacer(Modifier.height(12.dp)); Text(it, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp) }
+        shownNote?.let { Spacer(Modifier.height(12.dp)); Text(it, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp) }
         Spacer(Modifier.height(11.dp))
         SettingsItem(Icons.Default.Refresh, "Clear check-in history", "Your \"How are you feeling now?\" answers on this phone", onClick = {
             vm.clearCheckIns()
@@ -154,10 +170,11 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         SettingsItem(Icons.Default.Lock, "Privacy and support", "How this space works", onClick = onPrivacy)
         Spacer(Modifier.height(11.dp))
         if (signedIn) {
-            SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", "Return to sign-in options", onClick = {
+            SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Sign out", "Clears check-ins and the reminder on this phone", onClick = {
                 scope.launch {
                     status = ""
-                    try { vm.auth.signOut(); vm.clearConversation(); vm.refreshAuth(); onAuth() }
+                    // Check-ins and the reminder aren't tied to an account, so they go too, ready for whoever signs in next.
+                    try { vm.auth.signOut(); vm.clearLocalData(); vm.clearConversation(); vm.refreshAuth(); onAuth() }
                     catch (t: Exception) { status = t.message ?: "Couldn't sign out just now. Please try again." }
                 }
             })
@@ -177,12 +194,12 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
         title = { Text("Delete your account?") },
-        text = { Text("This removes your sign-in account and the check-ins saved on this phone. Conversations aren't stored on our server in this preview.") },
+        text = { Text("This removes your sign-in account and the check-ins saved on this phone, and turns off the daily check-in. Conversations aren't stored on our server in this preview.") },
         confirmButton = { TextButton(onClick = {
             confirmDelete = false
             scope.launch {
                 status = ""
-                try { vm.auth.deleteAccount(); vm.clearConversation(); vm.clearCheckIns(); vm.refreshAuth(); onAuth() }
+                try { vm.auth.deleteAccount(); vm.clearConversation(); vm.clearLocalData(); vm.refreshAuth(); onAuth() }
                 catch (t: Exception) { status = t.message ?: "Couldn't delete your account just now. Please sign in again and retry." }
             }
         }) { Text("Delete") } },

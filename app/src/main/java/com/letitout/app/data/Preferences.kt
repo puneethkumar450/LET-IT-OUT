@@ -1,6 +1,8 @@
 package com.letitout.app.data
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -16,7 +18,8 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.dataStore by preferencesDataStore("preferences")
+// A corrupt file is reset rather than failing every read and write.
+private val Context.dataStore by preferencesDataStore("preferences", corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() })
 
 /** Everything here stays on the phone. Check-ins are kept as the last 20 "MOOD:FEELING" tokens. */
 @Singleton
@@ -35,25 +38,19 @@ class DataStoreUserPreferences @Inject constructor(
         Mood.entries.firstOrNull { it.name == values[moodKey] } ?: Mood.TALK
     }.distinctUntilChanged()
 
-    override suspend fun setMood(mood: Mood) {
-        context.dataStore.edit { it[moodKey] = mood.name }
-    }
+    override suspend fun setMood(mood: Mood) = save { it[moodKey] = mood.name }
 
     override val checkInStats: Flow<CheckInStats> = data.map { values ->
         val recent = checkInTokens(values[checkInsKey]).takeLast(10)
         CheckInStats(total = recent.size, lighter = recent.count { it.endsWith(":${Feeling.LIGHTER.name}") })
     }.distinctUntilChanged()
 
-    override suspend fun recordCheckIn(mood: Mood, feeling: Feeling) {
-        context.dataStore.edit { values ->
-            val tokens = checkInTokens(values[checkInsKey]) + "${mood.name}:${feeling.name}"
-            values[checkInsKey] = tokens.takeLast(20).joinToString(",")
-        }
+    override suspend fun recordCheckIn(mood: Mood, feeling: Feeling) = save { values ->
+        val tokens = checkInTokens(values[checkInsKey]) + "${mood.name}:${feeling.name}"
+        values[checkInsKey] = tokens.takeLast(20).joinToString(",")
     }
 
-    override suspend fun clearCheckIns() {
-        context.dataStore.edit { it.remove(checkInsKey) }
-    }
+    override suspend fun clearCheckIns() = save { it.remove(checkInsKey) }
 
     override val reminder: Flow<ReminderSettings> = data.map { values ->
         val defaults = ReminderSettings()
@@ -64,11 +61,17 @@ class DataStoreUserPreferences @Inject constructor(
         )
     }.distinctUntilChanged()
 
-    override suspend fun setReminder(settings: ReminderSettings) {
-        context.dataStore.edit {
-            it[reminderEnabledKey] = settings.enabled
-            it[reminderHourKey] = settings.hour.coerceIn(0, 23)
-            it[reminderMinuteKey] = settings.minute.coerceIn(0, 59)
+    override suspend fun setReminder(settings: ReminderSettings) = save {
+        it[reminderEnabledKey] = settings.enabled
+        it[reminderHourKey] = settings.hour.coerceIn(0, 23)
+        it[reminderMinuteKey] = settings.minute.coerceIn(0, 59)
+    }
+
+    // Writes are best-effort: a full or failing disk must not crash the app over an on-device preference.
+    private suspend fun save(transform: suspend (MutablePreferences) -> Unit) {
+        try {
+            context.dataStore.edit(transform)
+        } catch (ignored: IOException) {
         }
     }
 

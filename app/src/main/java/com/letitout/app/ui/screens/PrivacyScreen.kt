@@ -41,12 +41,15 @@ internal fun PrivacyScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         InformationCard(
             Icons.Default.Lock, "When you use the chat",
-            "Your messages are sent to our server and AI provider to create a reply. Please don't share anything you aren't comfortable sending to those services."
+            "Your messages are sent to our server and AI provider to create a reply. Please don't share anything you aren't comfortable sending to those services. " +
+                "If you use the mic, your phone's speech service (often Google) turns your voice into text; LET IT OUT doesn't save the audio. " +
+                "If a reply feels hurtful or wrong, tap Report under it. Only that reply and the reason you pick are sent to us."
         )
         Spacer(Modifier.height(12.dp))
         InformationCard(
             Icons.Default.CheckCircle, "Your check-ins",
-            "Your \"How are you feeling now?\" answers and your reminder time stay on this phone. You can clear them anytime in Settings."
+            "Your \"How are you feeling now?\" answers (with the mood you picked) and your reminder time stay on this phone. " +
+                "They're cleared when you sign out or delete your account, and you can clear them anytime in Settings."
         )
         Spacer(Modifier.height(12.dp))
         InformationCard(

@@ -17,6 +17,8 @@ interface AuthGateway {
 
 interface ChatGateway {
     suspend fun reply(mood: Mood, conversation: List<ChatMessage>): ChatReply
+    /** Sends one reply the person chose to flag, and why. Throws on failure. */
+    suspend fun report(reason: ReportReason, replyText: String)
 }
 
 interface UserPreferences {

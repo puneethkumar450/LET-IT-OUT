@@ -80,7 +80,16 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
                     // Keep the guest identity when upgrading to Google.
                     current.linkWithCredential(firebaseCredential).await()
                 } catch (e: FirebaseAuthUserCollisionException) {
-                    // This Google account already has its own profile, so switch to it instead.
+                    // This Google account already has its own profile, so switch to it instead. Remove the guest first
+                    // (it holds nothing on our server) so it isn't left behind; deleting it after the switch could sign
+                    // the Google account out again.
+                    try {
+                        current.delete().await()
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (ignored: Exception) {
+                        // Best effort: switching accounts still works if the delete fails.
+                    }
                     auth.signInWithCredential(e.updatedCredential ?: firebaseCredential).await()
                 }
             } else {

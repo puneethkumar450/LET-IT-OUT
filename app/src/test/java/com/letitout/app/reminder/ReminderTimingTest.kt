@@ -1,6 +1,7 @@
 package com.letitout.app.reminder
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
@@ -70,5 +71,42 @@ class ReminderTimingTest {
                 assertEquals(minute, fire.minute)
             }
         }
+    }
+
+    @Test
+    fun onTimeFromTheChosenMinuteUpToTwoHoursLate() {
+        assertTrue(isOnTimeForReminder(20, 0, at("2026-10-22T20:00:00")))
+        assertTrue(isOnTimeForReminder(20, 0, at("2026-10-22T21:40:00")))
+        assertTrue(isOnTimeForReminder(20, 0, at("2026-10-22T22:00:00")))
+        assertFalse(isOnTimeForReminder(20, 0, at("2026-10-22T22:00:01")))
+        assertFalse(isOnTimeForReminder(20, 0, at("2026-10-23T01:30:00")))
+    }
+
+    @Test
+    fun earlyRunsAreNotOnTime() {
+        // An early run skips and reschedules to the imminent time, so nothing posts twice.
+        assertFalse(isOnTimeForReminder(20, 0, at("2026-10-22T19:59:30")))
+        assertEquals(Duration.ofSeconds(30), delayUntilNext(20, 0, at("2026-10-22T19:59:30")))
+    }
+
+    @Test
+    fun lateNightRunsAfterMidnightAreSkipped() {
+        assertTrue(isOnTimeForReminder(22, 0, at("2026-10-22T23:59:00")))
+        assertFalse(isOnTimeForReminder(22, 0, at("2026-10-23T00:30:00")))
+        assertFalse(isOnTimeForReminder(23, 0, at("2026-10-23T00:30:00")))
+    }
+
+    @Test
+    fun skippedLateRunStillPinsTheNextOneToTheChosenTime() {
+        val late = at("2026-10-22T23:40:00")
+        assertFalse(isOnTimeForReminder(20, 0, late))
+        val next = late.plus(delayUntilNext(20, 0, late))
+        assertEquals(at("2026-10-23T20:00:00"), next)
+    }
+
+    @Test
+    fun onTimeClampsOutOfRangeValues() {
+        assertTrue(isOnTimeForReminder(25, 99, at("2026-10-22T23:59:00")))
+        assertTrue(isOnTimeForReminder(-3, -5, at("2026-10-22T01:00:00")))
     }
 }

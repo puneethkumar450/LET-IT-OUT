@@ -26,6 +26,22 @@ class GroqTest {
         assertNull(parseGroqContent("not json"))
     }
 
+    @Test fun tokenLimitedReplyKeepsOnlyCompleteSentences() {
+        var truncated = 0
+        val cut = """{"choices":[{"finish_reason":"length","message":{"content":"That sounds so heavy. Honestly, seeing a"}}]}"""
+        assertEquals("That sounds so heavy.", parseGroqContent(cut) { truncated++ })
+        assertEquals(1, truncated)
+        val quoted = """{"choices":[{"finish_reason":"length","message":{"content":"You said \u201cI'm done.\u201d Ugh, that"}}]}"""
+        assertEquals("You said \u201cI'm done.\u201d", parseGroqContent(quoted))
+        val noSentence = """{"choices":[{"finish_reason":"length","message":{"content":"Honestly, seeing a"}}]}"""
+        assertNull(parseGroqContent(noSentence) { truncated++ })
+        assertEquals(2, truncated)
+        assertNull(parseGroqContent("""{"choices":[{"finish_reason":"length","message":{"reasoning":"thinking"}}]}"""))
+        val finished = """{"choices":[{"finish_reason":"stop","message":{"content":"Oh no, seeing a"}}]}"""
+        assertEquals("Oh no, seeing a", parseGroqContent(finished) { truncated++ })
+        assertEquals(2, truncated)
+    }
+
     @Test fun polishesReplies() {
         assertEquals("Hey, I'm here.", polishReply("  \"Hey, I'm here.\"  "))
         assertEquals("You called it “a joke”, and that hurt.", polishReply("“You called it “a joke”, and that hurt.”"))
@@ -50,7 +66,7 @@ class GroqTest {
         val body = Json.parseToJsonElement(provider.requestBody("system text", listOf(Message("user", "hi")))).jsonObject
         assertEquals("openai/gpt-oss-120b", body["model"]!!.jsonPrimitive.content)
         assertEquals(0.8, body["temperature"]!!.jsonPrimitive.double)
-        assertEquals(1024, body["max_completion_tokens"]!!.jsonPrimitive.int)
+        assertEquals(2048, body["max_completion_tokens"]!!.jsonPrimitive.int)
         assertEquals("medium", body["reasoning_effort"]!!.jsonPrimitive.content)
         val messages = body["messages"]!!.jsonArray
         assertEquals("system", messages[0].jsonObject["role"]!!.jsonPrimitive.content)
@@ -62,16 +78,16 @@ class GroqTest {
         assertNull(GroqProvider.fromEnvironment { null })
         assertNull(GroqProvider.fromEnvironment { if (it == "GROQ_API_KEY") "  " else null })
         val custom = GroqProvider.fromEnvironment {
-            mapOf("GROQ_API_KEY" to "k", "GROQ_MAX_COMPLETION_TOKENS" to "2048", "GROQ_REASONING_EFFORT" to "HIGH")[it]
+            mapOf("GROQ_API_KEY" to "k", "GROQ_MAX_COMPLETION_TOKENS" to "4096", "GROQ_REASONING_EFFORT" to "HIGH")[it]
         }!!
         val customBody = Json.parseToJsonElement(custom.requestBody("s", emptyList())).jsonObject
-        assertEquals(2048, customBody["max_completion_tokens"]!!.jsonPrimitive.int)
+        assertEquals(4096, customBody["max_completion_tokens"]!!.jsonPrimitive.int)
         assertEquals("high", customBody["reasoning_effort"]!!.jsonPrimitive.content)
         val invalid = GroqProvider.fromEnvironment {
             mapOf("GROQ_API_KEY" to "k", "GROQ_MAX_COMPLETION_TOKENS" to "lots", "GROQ_REASONING_EFFORT" to "max")[it]
         }!!
         val invalidBody = Json.parseToJsonElement(invalid.requestBody("s", emptyList())).jsonObject
-        assertEquals(1024, invalidBody["max_completion_tokens"]!!.jsonPrimitive.int)
+        assertEquals(2048, invalidBody["max_completion_tokens"]!!.jsonPrimitive.int)
         assertEquals("medium", invalidBody["reasoning_effort"]!!.jsonPrimitive.content)
         val llama = GroqProvider.fromEnvironment { mapOf("GROQ_API_KEY" to "k", "GROQ_MODEL" to "llama-3.3-70b-versatile")[it] }!!
         assertFalse("reasoning_effort" in Json.parseToJsonElement(llama.requestBody("s", emptyList())).jsonObject)

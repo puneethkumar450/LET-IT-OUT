@@ -3,7 +3,9 @@ package com.letitout.server
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.AuthErrorCode
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -20,6 +22,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.File
+import java.time.Instant
 
 @Serializable data class Message(val role: String, val content: String)
 @Serializable data class ChatRequest(val mood: String, val messages: List<Message>)
@@ -29,8 +33,11 @@ import kotlinx.serialization.json.Json
 const val NORMAL = "NORMAL"
 const val SUPPORT_SUGGESTED = "SUPPORT_SUGGESTED"
 internal const val MAX_BODY_CHARS = 64_000
-private const val MAX_BODY_BYTES = MAX_BODY_CHARS * 4L
+internal const val MAX_REPORT_CHARS = 8_000
 private const val HOUR_MILLIS = 60 * 60 * 1000L
+private const val GLOBAL_KEY = "all"
+// A rewrite only when the first call was quick, so two calls stay inside the app's 45 s read timeout.
+private const val REWRITE_BUDGET_MILLIS = 10_000L
 
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private val supportedMoods = setOf("ANGRY", "SAD", "STRESSED", "ANXIOUS", "LONELY", "HAPPY", "TALK")
@@ -40,29 +47,48 @@ internal object FriendlyErrors {
     const val SIGN_IN = "Please sign in again to keep talking."
     const val TOO_LONG = "That's a lot to send in one go. Try a shorter message."
     const val INVALID = "That message didn't come through properly. Please try sending it again."
-    const val TOO_MANY = "You've sent a lot of messages in the last hour. Take a breather and come back in a little while."
+    const val TOO_MANY = "That's the message limit for this hour. Give it a little while, then we can keep going."
     const val BUSY = "Lots of people are talking right now. Give it a minute and try again."
     const val NO_REPLY = "Couldn't get a reply just now. Please try sending that again."
+    const val TOO_MANY_REPORTS = "Thanks, we already have your recent reports. Please try again a little later."
 }
 
 class ChatDeps(
     val verifyToken: (suspend (String) -> String?)?,
     val provider: ReplyProvider?,
     val limiter: RateLimiter = RateLimiter(20, HOUR_MILLIS),
-    val careLimiter: RateLimiter = RateLimiter(30, HOUR_MILLIS)
+    val careLimiter: RateLimiter = RateLimiter(30, HOUR_MILLIS),
+    /** Provider calls per minute across all users, so rotating guest accounts cannot run up unbounded spend. */
+    val globalLimiter: RateLimiter = RateLimiter(60, 60_000L),
+    val reportSink: ReportSink = FileReportSink(File(System.getenv("REPORTS_FILE")?.takeIf { it.isNotBlank() } ?: "reports.jsonl")),
+    val reportLimiter: RateLimiter = RateLimiter(20, HOUR_MILLIS)
 ) {
     companion object {
         fun fromEnvironment(): ChatDeps {
             val verifier: (suspend (String) -> String?)? = if (setupFirebase()) ::verifyFirebaseToken else null
             val provider = GroqProvider.fromEnvironment()
             if (provider == null) System.err.println("GROQ_API_KEY is not set. AI chat remains unavailable.")
-            return ChatDeps(verifier, provider)
+            val perMinute = System.getenv("GLOBAL_REQUESTS_PER_MINUTE")?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: 60
+            return ChatDeps(verifier, provider, globalLimiter = RateLimiter(perMinute, 60_000L))
         }
     }
 }
 
-private suspend fun verifyFirebaseToken(token: String): String? =
-    withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(token).uid }
+private val rejectedTokenCodes = setOf(
+    AuthErrorCode.EXPIRED_ID_TOKEN, AuthErrorCode.INVALID_ID_TOKEN, AuthErrorCode.REVOKED_ID_TOKEN,
+    AuthErrorCode.USER_DISABLED, AuthErrorCode.TENANT_ID_MISMATCH
+)
+
+/** uid for a good token, null for a bad one; throws when Firebase cannot check it (e.g. its public keys failed to load). */
+private suspend fun verifyFirebaseToken(token: String): String? = withContext(Dispatchers.IO) {
+    try {
+        FirebaseAuth.getInstance().verifyIdToken(token).uid
+    } catch (e: FirebaseAuthException) {
+        if (e.authErrorCode in rejectedTokenCodes) null else throw e
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+}
 
 private fun setupFirebase(): Boolean {
     if (FirebaseApp.getApps().isNotEmpty()) return true
@@ -89,6 +115,7 @@ fun Application.module(deps: ChatDeps = ChatDeps.fromEnvironment()) {
     routing {
         get("/health") { call.respondText("ok") }
         post("/v1/chat") { call.handleChat(deps) }
+        post("/v1/report") { call.handleReport(deps) }
     }
 }
 
@@ -102,49 +129,104 @@ private fun ChatRequest.isValid(): Boolean =
     mood in supportedMoods && messages.size in 1..12 && messages.last().role == "user" &&
         messages.all { it.role in setOf("user", "assistant") && it.content.length in 1..2000 }
 
-/** Reads at most [MAX_BODY_BYTES]; null means the body is too large. */
-private suspend fun ApplicationCall.receiveLimitedText(): String? {
-    if ((request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > MAX_BODY_BYTES) return null
-    val bytes = receiveChannel().readRemaining(MAX_BODY_BYTES + 1).readByteArray()
-    if (bytes.size > MAX_BODY_BYTES) return null
-    return bytes.decodeToString().takeIf { it.length <= MAX_BODY_CHARS }
+/** Reads at most [maxChars] characters (and 4 bytes per character); null means the body is too large. */
+private suspend fun ApplicationCall.receiveLimitedText(maxChars: Int = MAX_BODY_CHARS): String? {
+    val maxBytes = maxChars * 4L
+    if ((request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > maxBytes) return null
+    val bytes = receiveChannel().readRemaining(maxBytes + 1).readByteArray()
+    if (bytes.size > maxBytes) return null
+    return bytes.decodeToString().takeIf { it.length <= maxChars }
+}
+
+/** The caller's uid, or null after responding 401 (bad sign-in) or 503 (Firebase could not check it). */
+private suspend fun ApplicationCall.authenticatedUid(verifyToken: suspend (String) -> String?): String? {
+    val idToken = request.headers[HttpHeaders.Authorization]
+        ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }?.substring(7)?.trim()
+    if (idToken.isNullOrEmpty()) return null.also { respondError(HttpStatusCode.Unauthorized, FriendlyErrors.SIGN_IN) }
+    // A throwing verifier is an outage on our side, not a bad sign-in, so don't send people to sign out.
+    val uid = try { verifyToken(idToken) } catch (e: CancellationException) { throw e } catch (_: Exception) {
+        return null.also { respondError(HttpStatusCode.ServiceUnavailable, FriendlyErrors.UNAVAILABLE) }
+    }
+    if (uid.isNullOrBlank()) return null.also { respondError(HttpStatusCode.Unauthorized, FriendlyErrors.SIGN_IN) }
+    return uid
 }
 
 private suspend fun ApplicationCall.handleChat(deps: ChatDeps) {
     val verifyToken = deps.verifyToken
     val provider = deps.provider
     if (verifyToken == null || provider == null) return respondError(HttpStatusCode.ServiceUnavailable, FriendlyErrors.UNAVAILABLE)
-
-    val idToken = request.headers[HttpHeaders.Authorization]
-        ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }?.substring(7)?.trim()
-    if (idToken.isNullOrEmpty()) return respondError(HttpStatusCode.Unauthorized, FriendlyErrors.SIGN_IN)
-    val uid = try { verifyToken(idToken) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-    if (uid.isNullOrBlank()) return respondError(HttpStatusCode.Unauthorized, FriendlyErrors.SIGN_IN)
+    val uid = authenticatedUid(verifyToken) ?: return
 
     val bodyText = receiveLimitedText() ?: return respondError(HttpStatusCode.PayloadTooLarge, FriendlyErrors.TOO_LONG)
     val req = try { json.decodeFromString(ChatRequest.serializer(), bodyText) } catch (_: Exception) { null }
     if (req == null || !req.isValid()) return respondError(HttpStatusCode.BadRequest, FriendlyErrors.INVALID)
 
     val recentUserMessages = req.messages.filter { it.role == "user" }.takeLast(3).map { it.content }
-    val care = needsExtraCare(recentUserMessages)
-    val fallback = Persona.fallbackReply(req.messages.last().content)
-    if (care) {
-        if (!deps.careLimiter.tryAcquire(uid)) return respondReply(fallback, SUPPORT_SUGGESTED)
-    } else if (!deps.limiter.tryAcquire(uid)) {
-        return respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY)
+    val recentReplies = req.messages.filter { it.role == "assistant" }.map { it.content }
+    // A recent Tele-MANAS mention means the chat already turned heavy, even if the last words slipped past the phrase list.
+    val care = needsExtraCare(recentUserMessages) || recentReplies.takeLast(2).any(::mentionsHelpline)
+    val fallback = Persona.fallbackReply(req.messages.last().content, recentReplies)
+    // Care turns may borrow normal quota before falling back to a canned reply.
+    val charged = (if (care) listOf(deps.careLimiter, deps.limiter) else listOf(deps.limiter)).firstOrNull { it.tryAcquire(uid) }
+        ?: return if (care) respondReply(fallback, SUPPORT_SUGGESTED)
+            else respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY)
+    if (!deps.globalLimiter.tryAcquire(GLOBAL_KEY)) {
+        charged.release(uid)
+        return if (care) respondReply(fallback, SUPPORT_SUGGESTED) else respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.BUSY)
     }
 
-    val reply = try {
-        polishReply(provider.reply(Persona.systemPrompt(req.mood, care), req.messages.takeLast(12)))
-            .ifBlank { throw ProviderUnavailable("blank reply") }
+    val prompt = Persona.systemPrompt(req.mood, care)
+    val history = req.messages.takeLast(12)
+    val started = System.currentTimeMillis()
+    var reply = try {
+        polishReply(provider.reply(prompt, history)).ifBlank { throw ProviderUnavailable("blank reply") }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
+        charged.release(uid)
         return when {
             care -> respondReply(fallback, SUPPORT_SUGGESTED)
             e is ProviderRateLimited -> respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.BUSY)
             else -> respondError(HttpStatusCode.BadGateway, FriendlyErrors.NO_REPLY)
         }
     }
+    if (soundsAlarming(reply)) {
+        if (care) return respondReply(fallback, SUPPORT_SUGGESTED)
+        // One rewrite when time allows; either way the person gets a reply, never an error over a word.
+        if (System.currentTimeMillis() - started < REWRITE_BUDGET_MILLIS && deps.globalLimiter.tryAcquire(GLOBAL_KEY)) {
+            reply = try {
+                polishReply(provider.reply(prompt + "\n\n" + Persona.rewriteNudge, history)).ifBlank { reply }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                reply
+            }
+        }
+    }
     respondReply(reply, if (care || mentionsProfessionalHelp(reply)) SUPPORT_SUGGESTED else NORMAL)
+}
+
+private suspend fun ApplicationCall.handleReport(deps: ChatDeps) {
+    val verifyToken = deps.verifyToken ?: return respondError(HttpStatusCode.ServiceUnavailable, FriendlyErrors.UNAVAILABLE)
+    val uid = authenticatedUid(verifyToken) ?: return
+
+    val bodyText = receiveLimitedText(MAX_REPORT_CHARS) ?: return respondError(HttpStatusCode.PayloadTooLarge, FriendlyErrors.TOO_LONG)
+    val req = try { json.decodeFromString(ReportRequest.serializer(), bodyText) } catch (_: Exception) { null }
+    val replyText = req?.replyText?.trim().orEmpty()
+    if (req == null || req.reason !in reportReasons || replyText.length !in 1..2000) {
+        return respondError(HttpStatusCode.BadRequest, FriendlyErrors.INVALID)
+    }
+    if (!deps.reportLimiter.tryAcquire(uid)) return respondError(HttpStatusCode.TooManyRequests, FriendlyErrors.TOO_MANY_REPORTS)
+
+    val report = StoredReport(Instant.now().toString(), req.reason, replyText, reporterId(uid))
+    try {
+        withContext(Dispatchers.IO) { deps.reportSink.save(report) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        deps.reportLimiter.release(uid)
+        System.err.println("Could not store a reply report.")
+        return respondError(HttpStatusCode.ServiceUnavailable, FriendlyErrors.UNAVAILABLE)
+    }
+    respond(HttpStatusCode.NoContent)
 }

@@ -1,5 +1,6 @@
 package com.letitout.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -40,6 +41,8 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(AppColors.Canvas.toArgb(), AppColors.Canvas.toArgb())
         )
         super.onCreate(savedInstanceState)
+        // Keep private conversations out of the Recents (app switcher) preview.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(false)
         setContent { LetItOutApp() }
     }
 }

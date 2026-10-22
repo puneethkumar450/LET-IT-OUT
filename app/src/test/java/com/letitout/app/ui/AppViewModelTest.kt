@@ -9,6 +9,7 @@ import com.letitout.app.data.CheckInStats
 import com.letitout.app.data.Feeling
 import com.letitout.app.data.Mood
 import com.letitout.app.data.ReminderSettings
+import com.letitout.app.data.ReportReason
 import com.letitout.app.data.UserPreferences
 import com.letitout.app.reminder.ReminderScheduler
 import kotlinx.coroutines.CompletableDeferred
@@ -39,6 +40,13 @@ class AppViewModelTest {
         val calls = mutableListOf<Pair<Mood, List<ChatMessage>>>()
         private val pending = ArrayDeque<CompletableDeferred<ChatReply>>()
         var ignoresCancellation = false
+        val reports = mutableListOf<Pair<ReportReason, String>>()
+        var reportFailure: Throwable? = null
+
+        override suspend fun report(reason: ReportReason, replyText: String) {
+            reportFailure?.let { throw it }
+            reports += reason to replyText
+        }
 
         override suspend fun reply(mood: Mood, conversation: List<ChatMessage>): ChatReply {
             calls += mood to conversation
@@ -195,24 +203,54 @@ class AppViewModelTest {
         assertNull(state.error)
     }
 
-    @Test fun supportCardShowsAndStaysDismissedForThisConversation() {
+    @Test fun supportCardShowsAndStaysDismissedForAFewReplies() {
         vm.send("i can't sleep and nothing feels worth it lately")
         chat.answer("That sounds really heavy.", support = true)
         assertTrue(state.supportSuggested)
+        assertTrue(state.supportOffered)
 
         vm.dismissSupport()
         assertFalse(state.supportSuggested)
+        assertTrue(state.supportOffered)
         vm.send("still feel the same")
         chat.answer("I'm here with you.", support = true)
         assertFalse(state.supportSuggested)
 
         vm.chooseMood(Mood.SAD)
+        assertFalse(state.supportOffered)
         vm.send("it's back again")
         chat.answer("I'm really glad you told me.", support = true)
         assertTrue(state.supportSuggested)
 
         vm.clearConversation()
         assertFalse(state.supportSuggested)
+        assertFalse(state.supportOffered)
+    }
+
+    @Test fun supportCardComesBackFourRepliesAfterNotNow() {
+        vm.send("everything feels pointless")
+        chat.answer("That sounds so heavy.", support = true)
+        vm.dismissSupport()
+        repeat(3) { turn ->
+            vm.send("message $turn")
+            chat.answer("reply $turn", support = true)
+            assertFalse("reply ${turn + 1} after Not now", state.supportSuggested)
+        }
+        vm.send("i still feel like giving up")
+        chat.answer("I'm really glad you told me.", support = true)
+        assertTrue(state.supportSuggested)
+    }
+
+    @Test fun ordinaryRepliesDontBringTheSupportCardBack() {
+        vm.send("weeks of bad sleep")
+        chat.answer("That's a long stretch.", support = true)
+        vm.dismissSupport()
+        repeat(5) { turn ->
+            vm.send("message $turn")
+            chat.answer("reply $turn")
+        }
+        assertFalse(state.supportSuggested)
+        assertTrue(state.supportOffered)
     }
 
     @Test fun feelingCheckIsDueAfterTwoRepliesAndResetsPerConversation() {
@@ -259,6 +297,40 @@ class AppViewModelTest {
 
         vm.setReminder(true, 30, 75)
         assertEquals("schedule 23:59", reminders.events.last())
+    }
+
+    @Test fun clearLocalDataTurnsOffTheReminderAndClearsCheckIns() {
+        vm.setReminder(true, 22, 0)
+        preferences.checkInStats.value = CheckInStats(6, 1)
+        vm.clearLocalData()
+        assertEquals("cancel", reminders.events.last())
+        assertEquals(ReminderSettings(false, 22, 0), preferences.reminder.value)
+        assertEquals(ReminderSettings(false, 22, 0), state.reminder)
+        assertEquals(1, preferences.clears)
+        assertEquals(CheckInStats(), state.checkInStats)
+    }
+
+    @Test fun reportingAReplySendsItAndSaysThanks() {
+        vm.send("hi")
+        chat.answer("Some reply that missed the mark.")
+        vm.reportReply("Some reply that missed the mark.", ReportReason.HURTFUL)
+        assertEquals(listOf(ReportReason.HURTFUL to "Some reply that missed the mark."), chat.reports)
+        assertTrue(state.reportNotice.orEmpty().startsWith("Thanks for telling us"))
+        assertNull(state.error)
+
+        vm.dismissReportNotice()
+        assertNull(state.reportNotice)
+    }
+
+    @Test fun failedReportSaysSoAndNoticeClearsWithANewConversation() {
+        chat.reportFailure = IOException("offline")
+        vm.reportReply("a reply", ReportReason.WRONG)
+        assertTrue(chat.reports.isEmpty())
+        assertTrue(state.reportNotice.orEmpty().startsWith("Couldn't send"))
+        assertNull(state.error)
+
+        vm.chooseMood(Mood.TALK)
+        assertNull(state.reportNotice)
     }
 
     @Test fun clearCheckInsResetsStats() {

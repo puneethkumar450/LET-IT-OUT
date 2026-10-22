@@ -30,6 +30,12 @@ interface ChatApi {
         @Header("Authorization") authorization: String,
         @Body request: ChatRequest
     ): ChatResponse
+
+    @POST("v1/report")
+    suspend fun report(
+        @Header("Authorization") authorization: String,
+        @Body request: ReportRequest
+    )
 }
 
 @Singleton
@@ -38,12 +44,30 @@ class ChatRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ChatGateway {
     override suspend fun reply(mood: Mood, conversation: List<ChatMessage>): ChatReply {
+        val idToken = idToken()
+        // The opening question the app showed goes first, so the reply follows on from what they were asked.
+        val messages = (listOf(ApiMessage("assistant", mood.prompt)) + conversation
+            .map { it.copy(text = it.text.trim().take(2000)) }
+            .filter { it.text.isNotBlank() }
+            .map { ApiMessage(if (it.fromUser) "user" else "assistant", it.text) })
+            .takeLast(12)
+        val response = api.chat("Bearer $idToken", ChatRequest(mood.name, messages))
+        val text = response.reply.trim()
+        if (text.isEmpty()) throw FriendlyException("I couldn't put a reply together just now. Mind trying again?")
+        return ChatReply(text, response.safetyState == "SUPPORT_SUGGESTED")
+    }
+
+    override suspend fun report(reason: ReportReason, replyText: String) {
+        api.report("Bearer ${idToken()}", ReportRequest(reason.slug, replyText.trim().take(2000)))
+    }
+
+    private suspend fun idToken(): String {
         if (FirebaseApp.getApps(context).isEmpty()) {
             throw FriendlyException("Chat isn't set up in this build yet.")
         }
         val user = FirebaseAuth.getInstance().currentUser
             ?: throw FriendlyException("Please sign in or continue as a guest first.")
-        val idToken = try {
+        return try {
             user.getIdToken(false).await().token
         } catch (cancel: CancellationException) {
             throw cancel
@@ -52,15 +76,6 @@ class ChatRepository @Inject constructor(
         } catch (e: Exception) {
             throw FriendlyException("Your sign-in needs a refresh. Please sign out and sign in again.", e)
         } ?: throw FriendlyException("Your sign-in needs a refresh. Please sign out and sign in again.")
-        val messages = conversation
-            .map { it.copy(text = it.text.trim().take(2000)) }
-            .filter { it.text.isNotBlank() }
-            .takeLast(12)
-            .map { ApiMessage(if (it.fromUser) "user" else "assistant", it.text) }
-        val response = api.chat("Bearer $idToken", ChatRequest(mood.name, messages))
-        val text = response.reply.trim()
-        if (text.isEmpty()) throw FriendlyException("I couldn't put a reply together just now. Mind trying again?")
-        return ChatReply(text, response.safetyState == "SUPPORT_SUGGESTED")
     }
 }
 

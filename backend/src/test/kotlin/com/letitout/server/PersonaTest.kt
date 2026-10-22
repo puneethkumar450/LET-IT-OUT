@@ -39,6 +39,7 @@ class PersonaTest {
             assertTrue("Tele-MANAS" in reply)
             assertTrue("doctor" in reply.lowercase())
             assertTrue(mentionsProfessionalHelp(reply))
+            assertFalse(soundsAlarming(reply))
             assertTrue(reply.count { it == '?' } <= 1)
         }
     }
@@ -46,6 +47,7 @@ class PersonaTest {
     @Test fun guidanceTextAvoidsBannedWords() {
         Persona.moodGuidance.values.forEach(::assertNoBannedWords)
         assertNoBannedWords(Persona.extraCareGuidance)
+        assertNoBannedWords(Persona.rewriteNudge)
     }
 
     @Test fun fallbackChoiceIsStable() {
@@ -54,5 +56,16 @@ class PersonaTest {
         assertTrue(first in Persona.supportFallbackReplies)
         val spread = (1..50).map { Persona.fallbackReply("message $it") }.toSet()
         assertTrue(spread.size > 1)
+    }
+
+    @Test fun fallbackAvoidsRepeatingRecentReplies() {
+        val seed = "ok"
+        val first = Persona.fallbackReply(seed)
+        val second = Persona.fallbackReply(seed, listOf(first))
+        assertTrue(second != first && second in Persona.supportFallbackReplies)
+        val third = Persona.fallbackReply(seed, listOf(first, second))
+        assertEquals(3, setOf(first, second, third).size)
+        // All three already sent: reuse the one sent longest ago.
+        assertEquals(first, Persona.fallbackReply(seed, listOf(first, "I'm here.", second, third)))
     }
 }

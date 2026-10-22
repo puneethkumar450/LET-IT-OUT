@@ -13,9 +13,11 @@ internal fun assertNoBannedWords(text: String) =
 internal class FakeProvider(var reply: String = "Oh no. That sounds like a really long day.", var failure: Exception? = null) :
     ReplyProvider {
     val calls = mutableListOf<Pair<String, List<Message>>>()
+    /** Replies handed out first, one per call, before falling back to [reply]. */
+    val queued = ArrayDeque<String>()
     override suspend fun reply(systemPrompt: String, messages: List<Message>): String {
         calls += systemPrompt to messages
         failure?.let { throw it }
-        return reply
+        return queued.removeFirstOrNull() ?: reply
     }
 }

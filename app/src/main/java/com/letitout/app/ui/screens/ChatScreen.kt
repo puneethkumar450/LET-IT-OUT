@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.R
 import com.letitout.app.data.Feeling
 import com.letitout.app.data.Mood
+import com.letitout.app.data.ReportReason
 import com.letitout.app.data.palette
 import com.letitout.app.ui.AppColors
 import com.letitout.app.ui.AppViewModel
@@ -59,6 +60,7 @@ import java.util.Locale
 private const val SPEECH_MISSED = "Couldn't catch that. Try again, or type it out if that's easier."
 private const val MIC_DENIED = "Microphone access is off. Typing works just as well."
 private const val VOICE_UNAVAILABLE = "Voice input isn't available on this phone, but typing works just as well."
+private const val LISTEN_UNAVAILABLE = "Reading aloud isn't available on this phone right now."
 
 private fun speechIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -77,6 +79,8 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
     var isListening by remember { mutableStateOf(false) }
     var speechEnabled by remember { mutableStateOf(false) }
     var askFeeling by remember { mutableStateOf(false) }
+    var heavierStep by remember { mutableStateOf(false) }
+    var reportTarget by remember { mutableStateOf<String?>(null) }
     val tts = remember { TextToSpeech(context) { result -> speechEnabled = result == TextToSpeech.SUCCESS } }
     DisposableEffect(tts) { onDispose { tts.stop(); tts.shutdown() } }
     val recognizer = remember {
@@ -115,8 +119,10 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
         }
     }
     // Leaving after a real conversation asks one gentle question first; otherwise just go back.
-    val leaveChat: () -> Unit = { if (state.feelingCheckDue) askFeeling = true else onBack() }
-    BackHandler(enabled = state.feelingCheckDue) { askFeeling = true }
+    // That includes leaving while the second reply is still on its way, which would otherwise skip the question.
+    val checkDue = state.feelingCheckDue || (state.loading && state.messages.count { !it.fromUser } >= 1)
+    val leaveChat: () -> Unit = { if (checkDue) askFeeling = true else onBack() }
+    BackHandler(enabled = checkDue) { askFeeling = true }
     LaunchedEffect(state.messages.size, state.loading) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.size + if (state.loading) 1 else 0)
     }
@@ -132,7 +138,7 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
                     Text("${state.mood.label} space", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Ink)
-                    Text(if (state.loading) "typing…" else "Take your time", fontSize = 12.sp, color = if (state.loading) palette.primary else AppColors.Muted)
+                    Text(if (state.loading) "Listening…" else "AI companion · Take your time", fontSize = 12.sp, color = if (state.loading) palette.primary else AppColors.Muted)
                 }
                 IconButton(onClick = { vm.clearConversation(); tts.stop(); speechError = null }, modifier = Modifier.background(AppColors.PrimarySoft, CircleShape)) {
                     Icon(Icons.Default.Delete, "Clear this conversation", tint = AppColors.Primary, modifier = Modifier.size(20.dp))
@@ -187,15 +193,23 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
                         ) {
                             Text(message.text, modifier = Modifier.padding(horizontal = 17.dp, vertical = 14.dp), color = if (message.fromUser) Color.White else AppColors.Ink, fontSize = 15.sp, lineHeight = 21.sp)
                         }
-                        if (!message.fromUser) TextButton(onClick = { if (speechEnabled) { tts.language = Locale.getDefault(); tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, "letitout-reply") } }) {
-                            Icon(Icons.Default.PlayArrow, "Read this aloud", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Listen", fontSize = 12.sp)
+                        if (!message.fromUser) Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                if (speechEnabled) { tts.language = Locale.getDefault(); tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, "letitout-reply") }
+                                else speechError = LISTEN_UNAVAILABLE
+                            }) {
+                                Icon(Icons.Default.PlayArrow, "Read this aloud", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Listen", fontSize = 12.sp)
+                            }
+                            TextButton(onClick = { reportTarget = message.text }) {
+                                Text("Report", fontSize = 12.sp, color = AppColors.Muted)
+                            }
                         }
                     }
                 }
             }
             if (state.loading) item {
                 Surface(shape = RoundedCornerShape(20.dp), color = AppColors.Card, border = BorderStroke(1.dp, AppColors.Line)) {
-                    Text("typing…", modifier = Modifier.padding(horizontal = 17.dp, vertical = 12.dp), color = AppColors.Muted, fontSize = 14.sp)
+                    Text("Listening…", modifier = Modifier.padding(horizontal = 17.dp, vertical = 12.dp), color = AppColors.Muted, fontSize = 14.sp)
                 }
             }
         }
@@ -205,6 +219,14 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(error, color = AppColors.Error, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
                     TextButton(onClick = vm::retry) { Text("Retry") }
+                }
+            }
+        }
+        state.reportNotice?.let { notice ->
+            Surface(color = AppColors.PrimarySoft, shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(notice, color = AppColors.Ink, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = vm::dismissReportNotice) { Text("OK") }
                 }
             }
         }
@@ -255,7 +277,8 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
         val finish: (Feeling?) -> Unit = { feeling ->
             askFeeling = false
             if (feeling == null) vm.skipFeelingCheck() else vm.recordFeeling(feeling)
-            onBack()
+            // "Heavier" gets a short, kind word before leaving instead of silence.
+            if (feeling == Feeling.HEAVIER) heavierStep = true else onBack()
         }
         AlertDialog(
             onDismissRequest = { askFeeling = false },
@@ -273,6 +296,63 @@ internal fun ChatScreen(vm: AppViewModel, onBack: () -> Unit) {
             },
             confirmButton = { TextButton(onClick = { finish(null) }) { Text("Skip") } }
         )
+    }
+    if (heavierStep) {
+        val leave: () -> Unit = { heavierStep = false; onBack() }
+        AlertDialog(
+            onDismissRequest = leave,
+            containerColor = AppColors.Card,
+            shape = RoundedCornerShape(26.dp),
+            title = { Text("Thanks for telling me", color = AppColors.Ink, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    Text(
+                        "Some talks stir things up before they settle, and that's okay. Come back whenever you want to talk it through.",
+                        color = AppColors.Ink, fontSize = 14.sp, lineHeight = 20.sp
+                    )
+                    if (state.supportOffered) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "If it's been heavy for a while, talking to a doctor really is the best option. Tele-MANAS ($TELE_MANAS_NUMBER) is free and open 24x7.",
+                            color = AppColors.Ink, fontSize = 14.sp, lineHeight = 20.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = leave) { Text("Okay") } },
+            dismissButton = { if (state.supportOffered) TextButton(onClick = { dialTeleManas(context) }) { Text("Call $TELE_MANAS_NUMBER") } }
+        )
+    }
+    reportTarget?.let { reply ->
+        AlertDialog(
+            onDismissRequest = { reportTarget = null },
+            containerColor = AppColors.Card,
+            shape = RoundedCornerShape(26.dp),
+            title = { Text("Report this reply?", color = AppColors.Ink, fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column {
+                    Text("Pick what felt wrong. This reply and your reason will be sent to us so we can improve.", color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp)
+                    Spacer(Modifier.height(16.dp))
+                    ReportReason.entries.forEach { reason ->
+                        ReportOption(reason.label) { reportTarget = null; vm.reportReply(reply, reason) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { reportTarget = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun ReportOption(label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = AppColors.Card,
+        shape = RoundedCornerShape(17.dp),
+        border = BorderStroke(1.dp, AppColors.Line),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 9.dp)
+    ) {
+        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp), color = AppColors.Ink, fontSize = 15.sp)
     }
 }
 
@@ -309,7 +389,7 @@ private fun SupportCard(onCall: () -> Unit, onDismiss: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                "Talking to a doctor is the best next step, or someone you trust. Tele-MANAS ($TELE_MANAS_NUMBER) is free and open 24x7, with trained counsellors who'll listen.",
+                "Talking to a doctor really is the best next step, and letting someone you trust know can help too. Tele-MANAS ($TELE_MANAS_NUMBER) is free and open 24x7, with trained counsellors who'll listen.",
                 color = AppColors.Ink, fontSize = 13.sp, lineHeight = 19.sp
             )
             Spacer(Modifier.height(12.dp))

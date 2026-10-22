@@ -27,6 +27,11 @@ class RateLimiter(
         return allowed
     }
 
+    /** Gives back the latest hit for [key], for a request that never got a reply. */
+    fun release(key: String) {
+        hits.computeIfPresent(key) { _, times -> times.removeLastOrNull(); times.takeIf { it.isNotEmpty() } }
+    }
+
     private fun sweep(now: Long) {
         if (now - lastSweep < windowMillis) return
         lastSweep = now

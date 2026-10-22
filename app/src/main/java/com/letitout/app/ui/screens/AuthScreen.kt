@@ -46,6 +46,7 @@ internal fun AuthScreen(vm: AppViewModel, onBack: () -> Unit, onContinue: () -> 
                         val signedIn = vm.auth.signInGoogle(activity)
                         if (signedIn) { vm.refreshAuth(); onContinue() }
                     } catch (t: Exception) {
+                        vm.refreshAuth() // a failed switch from a guest can leave nobody signed in
                         error = t.message ?: "Google sign-in didn't go through. Please try again."
                     } finally {
                         working = false

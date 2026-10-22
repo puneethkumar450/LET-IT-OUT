@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.letitout.app.MainActivity
 import com.letitout.app.R
 import java.time.LocalDate
+import java.time.LocalTime
 
 object ReminderNotifications {
     private const val CHANNEL_ID = "daily_check_in"
@@ -41,7 +42,7 @@ object ReminderNotifications {
         val openApp = PendingIntent.getActivity(
             context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val message = reminderMessageFor(LocalDate.now().toEpochDay())
+        val message = reminderMessageFor(LocalDate.now().toEpochDay(), LocalTime.now().hour)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(message.title)

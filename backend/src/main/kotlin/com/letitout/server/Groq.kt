@@ -1,7 +1,7 @@
 package com.letitout.server
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.*
 import java.net.URI
 import java.net.http.HttpClient
@@ -25,20 +25,28 @@ class GroqProvider(
 ) : ReplyProvider {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(7)).build()
 
-    override suspend fun reply(systemPrompt: String, messages: List<Message>): String = withContext(Dispatchers.IO) {
+    override suspend fun reply(systemPrompt: String, messages: List<Message>): String {
         val request = HttpRequest.newBuilder(URI.create("https://api.groq.com/openai/v1/chat/completions"))
             .header("Authorization", "Bearer $apiKey")
             .header("Content-Type", "application/json")
             .timeout(timeout)
             .POST(HttpRequest.BodyPublishers.ofString(requestBody(systemPrompt, messages)))
             .build()
-        val response = try { http.send(request, HttpResponse.BodyHandlers.ofString()) }
+        // Async, so a waiting call holds no thread and a cancelled request (client gone) aborts the exchange.
+        val pending = http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        val response = try { pending.await() }
+            catch (e: CancellationException) { pending.cancel(true); throw e }
             catch (e: java.io.IOException) { throw ProviderUnavailable(e.javaClass.simpleName) }
         // Never log or forward the provider body: it can contain user content or operational details.
-        when (val status = response.statusCode()) {
-            in 200..299 -> parseGroqContent(response.body()) ?: run {
-                System.err.println("Groq returned no visible reply. If this repeats, raise GROQ_MAX_COMPLETION_TOKENS.")
-                throw ProviderUnavailable("empty content")
+        return when (val status = response.statusCode()) {
+            in 200..299 -> {
+                var hitLimit = false
+                val content = parseGroqContent(response.body()) { hitLimit = true }
+                if (hitLimit) System.err.println("Groq reply hit the token limit. Consider raising GROQ_MAX_COMPLETION_TOKENS.")
+                content ?: run {
+                    if (!hitLimit) System.err.println("Groq returned no visible reply. If this repeats, raise GROQ_MAX_COMPLETION_TOKENS.")
+                    throw ProviderUnavailable(if (hitLimit) "length" else "empty content")
+                }
             }
             429 -> throw ProviderRateLimited()
             else -> {
@@ -62,7 +70,7 @@ class GroqProvider(
 
     companion object {
         const val DEFAULT_MODEL = "openai/gpt-oss-120b"
-        const val DEFAULT_MAX_COMPLETION_TOKENS = 1024
+        const val DEFAULT_MAX_COMPLETION_TOKENS = 2048
         const val DEFAULT_REASONING_EFFORT = "medium"
 
         fun fromEnvironment(env: (String) -> String? = System::getenv): GroqProvider? {
@@ -81,12 +89,23 @@ class GroqProvider(
 
 private val groqJson = Json { ignoreUnknownKeys = true }
 
-/** Returns the visible reply text, ignoring any `reasoning` field; null when content is missing or blank. */
-internal fun parseGroqContent(body: String): String? = runCatching {
-    val message = groqJson.parseToJsonElement(body).jsonObject["choices"]?.jsonArray?.firstOrNull()
-        ?.jsonObject?.get("message")?.jsonObject ?: return null
-    (message["content"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+/**
+ * Returns the visible reply text, ignoring any `reasoning` field; null when content is missing or blank. When the token
+ * limit cut the reply off (`finish_reason` "length"), calls [onTruncated] and keeps only the complete sentences (null if none).
+ */
+internal fun parseGroqContent(body: String, onTruncated: () -> Unit = {}): String? = runCatching {
+    val choice = groqJson.parseToJsonElement(body).jsonObject["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
+    val content = (choice["message"]?.jsonObject?.get("content") as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+    val truncated = (choice["finish_reason"] as? JsonPrimitive)?.contentOrNull == "length"
+    if (truncated) onTruncated()
+    (if (truncated) content?.let(::completeSentences) else content)?.takeIf { it.isNotEmpty() }
 }.getOrNull()
+
+private fun completeSentences(text: String): String {
+    var end = text.indexOfLast { it == '.' || it == '!' || it == '?' || it == '\u0964' } + 1
+    while (end in 1 until text.length && text[end] in "\"\u201D\u2019')") end++
+    return text.take(end).trim()
+}
 
 private const val MAX_REPLY_CHARS = 1_800
 
