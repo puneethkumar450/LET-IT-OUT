@@ -2,6 +2,7 @@ package com.letitout.app.auth
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -13,6 +14,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.letitout.app.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,14 +59,29 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
     }
 
     suspend fun signOut() {
-        if (isConfigured()) FirebaseAuth.getInstance().signOut()
-        CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+        val auth = if (isConfigured()) FirebaseAuth.getInstance() else null
+        val hadGoogleAccount = auth?.currentUser?.isAnonymous == false
+        auth?.signOut()
+        if (hadGoogleAccount) clearGoogleCredentialState()
     }
 
     suspend fun deleteAccount() {
         check(isSignedIn()) { "No authenticated account to delete." }
-        FirebaseAuth.getInstance().currentUser!!.delete().await()
-        CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+        val user = FirebaseAuth.getInstance().currentUser!!
+        val hadGoogleAccount = !user.isAnonymous
+        user.delete().await()
+        if (hadGoogleAccount) clearGoogleCredentialState()
+    }
+
+    private suspend fun clearGoogleCredentialState() {
+        try {
+            CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            // Firebase sign-out/deletion has already succeeded. Credential providers are optional.
+            Log.w("AuthManager", "Could not clear the Google credential state", error)
+        }
     }
 
     private fun webClientId(): String {

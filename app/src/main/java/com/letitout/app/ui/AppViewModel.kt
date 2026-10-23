@@ -127,6 +127,7 @@ class AppViewModel @Inject constructor(
         t is IOException -> "I couldn't reach the server just now. Your message is still here — nothing was lost."
         t is HttpException && t.code() == 401 -> "Your sign-in has expired. Please sign in again, then try once more."
         t is HttpException && t.code() == 429 -> "Lots of messages right now. Please wait a moment and try again."
+        t is HttpException && t.code() == 503 -> "The chat service isn't ready yet. Your message is still here — please try again later."
         t is HttpException -> "Something went wrong on our side. Your message is still here — nothing was lost."
         else -> t.message ?: "Something went wrong. Your message is still here — nothing was lost."
     }

@@ -13,4 +13,5 @@ local.properties
 *.p12
 *.key
 app/google-services.json
+/backend/firebase-admin.json
 .DS_Store

@@ -2,7 +2,7 @@
 
 **A mood-aware Android AI listening companion (v0.1.0 developer starter).**
 
-> **Status: developer starter, not a release.** The Android debug build and backend unit tests passed locally. On 19 October 2026, Firebase Google and Anonymous providers were configured for the Android app. Guest sign-in and guest-to-Google account linking succeeded on an emulator. Fresh Google sign-in, real AI replies, voice recognition, and real-device behavior still need verification. This is **not** ready for real users or public distribution.
+> **Status: developer starter, not a public release.** Android debug/release builds and backend tests pass locally. Guest sign-in and real AI chat replies have worked on an emulator. Voice recognition, physical-device behavior, production infrastructure, and independent safety review still need verification before real users are invited.
 
 **Android application ID:** `com.letitout.app`
 **Display name:** `LET IT OUT`
@@ -13,7 +13,7 @@
 - Native Jetpack Compose splash, three-page onboarding, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat view, settings and Privacy & Help screen, with Android Back navigation.
 - Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, speech and theme settings persist through DataStore.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in, connected to the development Firebase project `let-it-out-d661a` through the ignored `app/google-services.json`.
-- Ktor backend exposing `/health` and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, limiting input and per-user traffic.
+- Ktor backend exposing `/health`, `/ready`, and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, and limiting input and traffic. Production mode uses Firestore shared counters and starts with chat disabled.
 - Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
 - An intentionally limited **prototype-only** crisis keyword guard plus configurable support resources. **Not a clinically validated or sufficient production safety system.**
 - No AdMob, analytics trackers, WebRTC, background microphone, or large downloadable AI models.
@@ -31,14 +31,13 @@ cd LET-IT-OUT
 
 The Gradle 8.13 wrapper is included. Do not commit `local.properties` or API keys.
 
-For an emulator, create `local.properties`:
+For an emulator, create `local.properties` with the Android SDK path. The debug build defaults to `http://10.0.2.2:8080/`:
 
 ```properties
 sdk.dir=/Users/YOUR_USER/Library/Android/sdk
-apiBaseUrl=http://10.0.2.2:8080/
 ```
 
-The app reads the Web OAuth client ID from Firebase's generated `default_web_client_id` after you add `app/google-services.json`. If necessary, `webClientId=YOUR_FIREBASE_WEB_OAUTH_CLIENT_ID.apps.googleusercontent.com` can be set in `local.properties` as a fallback. It is a public identifier, not a secret. To test on a physical Android device, use an HTTPS URL reachable by that device instead of `10.0.2.2`. Release builds intentionally disallow plain HTTP; cleartext is debug-only.
+The app reads the Web OAuth client ID from Firebase's generated `default_web_client_id` after you add `app/google-services.json`. To override the chat server for any build, pass `-PapiBaseUrl=https://YOUR_SERVER_URL/` to Gradle. For a physical Android device, use an HTTPS URL reachable by that device instead of `10.0.2.2`. Release builds disallow plain HTTP; cleartext is debug-only.
 
 ### Build variants and signing
 
@@ -59,18 +58,15 @@ The development Firebase project is configured as recorded in [docs/FIREBASE_SET
 
 ## 3. Start backend
 
-In a terminal with JDK 21 and Gradle 8.13 available:
+For local development, copy `backend/.env.example` to the ignored `backend/.env`, set `GROQ_API_KEY`, and point `GOOGLE_APPLICATION_CREDENTIALS` at the ignored `backend/firebase-admin.json` file. Then run:
 
 ```bash
-cd backend
-export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/service-account.json"
-export FIREBASE_PROJECT_ID="YOUR_PROJECT_ID"
-export GROQ_API_KEY="YOUR_GROQ_KEY"
-export GROQ_MODEL="openai/gpt-oss-120b"
-../gradlew run
+./backend/run-local.sh
 ```
 
-Check `http://localhost:8080/health`. The `/v1/chat` endpoint returns 503 when Firebase admin or Groq is unconfigured. Never place `GROQ_API_KEY` in the Android application.
+Check `http://localhost:8080/health` for server liveness and `http://localhost:8080/ready` for chat configuration. The script stops with a clear message if either credential is missing. The `/v1/chat` endpoint returns 503 when Firebase Admin or Groq is unconfigured. Never place `GROQ_API_KEY` or the Firebase Admin JSON in the Android application.
+
+For Cloud Run packaging, service identity, Secret Manager, Firestore limits, and staged rollout, see [docs/PRODUCTION_BACKEND.md](docs/PRODUCTION_BACKEND.md). This machine does not currently have the Google Cloud CLI or Docker installed, so no cloud deployment has been performed.
 
 ⚠️ **Free-tier warning:** Groq account rate limits and model availability can change; do not assume free API access is unlimited. Verify pricing and privacy terms before collecting real emotional conversations.
 
@@ -93,7 +89,7 @@ Response:
 
 ## 5. Existing limitations
 
-- The debug build, anonymous guest sign-in, and guest-to-Google linking were verified on an emulator. Fresh Google sign-in, AI replies, voice recognition, and physical-device behavior remain unverified.
+- The debug build, anonymous guest sign-in, guest-to-Google linking, and real AI replies were verified on an emulator. Fresh Google sign-in, voice recognition, and physical-device behavior remain unverified.
 - Account deletion may require recent Firebase reauthentication. For a production service, implement complete user-data erasure wherever data is retained.
 - Guest-to-Google account upgrade is implemented using Firebase credential linking; it needs collision-handling tests.
 - Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
@@ -101,7 +97,7 @@ Response:
 - Built-in Android TTS voice quality and STT languages vary by device. STT might send audio to the device's selected speech-service provider.
 - No ad SDK is integrated. Acquisition planning is in `docs/MARKETING_PLAN.md`.
 - Website and iOS app are future milestones.
-- The sample Ktor backend is not production-hardened (in-memory rate limits, no distributed usage enforcement or clinically reviewed safety routing).
+- Production backend packaging and shared limits are prepared, but the clinically reviewed safety routing and privacy review are still outstanding. Production chat remains disabled by default.
 
 ## 6. Next tasks
 

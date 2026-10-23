@@ -1,6 +1,6 @@
 package com.letitout.app.ui
 
-import android.app.Activity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -187,7 +186,7 @@ private fun PageDots(current: Int, count: Int) {
 
 @Composable
 internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: () -> Unit, onPrivacy: () -> Unit) {
-    val activity = LocalContext.current as Activity
+    val activity = requireNotNull(LocalActivity.current)
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

@@ -13,17 +13,20 @@ import io.ktor.server.netty.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
-import java.util.concurrent.ConcurrentHashMap
 
 @Serializable data class Message(val role: String, val content: String)
 @Serializable data class ChatRequest(val mood: String, val messages: List<Message>, val intensity: Int? = null)
@@ -58,40 +61,30 @@ If you suspect imminent danger or risk of self-harm, prioritize immediate human 
 You can respond in the user's language when confident; do not invent helpline information.
 """.trimIndent()
 
-private val requestTimestamps = ConcurrentHashMap<String, MutableList<Long>>()
-private fun withinLimit(uid: String): Boolean {
-    val now = System.currentTimeMillis()
-    val times = requestTimestamps.computeIfAbsent(uid) { mutableListOf() }
-    synchronized(times) {
-        times.removeAll { now - it > 60 * 60 * 1000L }
-        if (times.size >= 20) return false
-        times.add(now)
-        return true
-    }
-}
-
-private fun setupFirebase() {
-    val projectId = System.getenv("FIREBASE_PROJECT_ID")
-    if (projectId.isNullOrBlank()) return
-    runCatching {
+private fun setupFirebase(config: ServerConfig) {
+    val projectId = config.projectId ?: return
+    try {
         val options = FirebaseOptions.builder()
             .setCredentials(GoogleCredentials.getApplicationDefault())
             .setProjectId(projectId)
             .build()
         if (FirebaseApp.getApps().isEmpty()) FirebaseApp.initializeApp(options)
-    }.onFailure { System.err.println("Firebase admin initialization failed. AI chat remains unavailable.") }
+    } catch (error: Exception) {
+        if (config.production) throw IllegalStateException("Firebase Admin initialization failed", error)
+        System.err.println("Firebase admin initialization failed. AI chat remains unavailable.")
+    }
 }
 
-private fun providerConfigured(): Boolean = System.getenv("GROQ_API_KEY")?.isNotBlank() == true
+private fun chatReady(config: ServerConfig): Boolean =
+    config.chatEnabled && config.groqApiKey != null && FirebaseApp.getApps().isNotEmpty()
 
-private suspend fun groqReply(req: ChatRequest): String = withContext(Dispatchers.IO) {
-    val apiKey = requireNotNull(System.getenv("GROQ_API_KEY"))
-    val model = System.getenv("GROQ_MODEL") ?: "openai/gpt-oss-120b"
+private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = withContext(Dispatchers.IO) {
+    val apiKey = requireNotNull(config.groqApiKey)
     val recent = req.messages.takeLast(12)
     val intensityNote = req.intensity?.takeIf { it in 1..10 }?.let { " Self-rated intensity: $it/10." } ?: ""
     val fullPrompt = "$prompt\nUser-selected mood: ${req.mood}.$intensityNote Do not assume mood is clinically accurate."
     val body = buildJsonObject {
-        put("model", model)
+        put("model", config.groqModel)
         put("temperature", 0.5)
         put("max_completion_tokens", 220)
         put("reasoning_effort", "low")
@@ -116,23 +109,54 @@ private suspend fun groqReply(req: ChatRequest): String = withContext(Dispatcher
     }
     json.parseToJsonElement(response.body()).jsonObject["choices"]!!.jsonArray
         .first().jsonObject["message"]!!.jsonObject["content"]?.jsonPrimitive?.content
-        ?.trim()?.takeIf { it.isNotEmpty() } ?: throw ProviderUnavailable()
+        ?.trim()?.take(4000)?.takeIf { it.isNotEmpty() } ?: throw ProviderUnavailable()
 }
 
 private class ProviderUnavailable : RuntimeException()
 private class ProviderRateLimited : RuntimeException()
 
 fun main() {
-    setupFirebase()
-    val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-    embeddedServer(Netty, host = "0.0.0.0", port = port) { module() }.start(wait = true)
+    val config = ServerConfig.fromEnvironment()
+    setupFirebase(config)
+    embeddedServer(Netty, host = "0.0.0.0", port = config.port) { module(config) }.start(wait = true)
 }
 
-fun Application.module() {
+internal fun validChatRequest(req: ChatRequest): Boolean =
+    req.mood in supportedMoods && req.messages.isNotEmpty() && req.messages.size <= 12 &&
+        (req.intensity == null || req.intensity in 1..10) &&
+        req.messages.all { it.role in setOf("user", "assistant") && it.content.isNotBlank() && it.content.length <= 2000 } &&
+        req.messages.last().role == "user"
+
+private suspend fun ApplicationCall.boundedBody(maxBytes: Int = 20_000): String? {
+    val channel = receiveChannel()
+    val buffer = ByteArray(4096)
+    val output = ByteArrayOutputStream()
+    while (true) {
+        val count = channel.readAvailable(buffer, 0, buffer.size)
+        if (count == -1) break
+        if (output.size() + count > maxBytes) return null
+        output.write(buffer, 0, count)
+    }
+    return output.toString(StandardCharsets.UTF_8)
+}
+
+internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironment()) {
+    val limiter: RateLimiter by lazy {
+        if (config.production) FirestoreRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
+        else LocalRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
+    }
     routing {
         get("/health") { call.respondText("ok") }
+        get("/ready") {
+            if (!chatReady(config)) {
+                call.respond(HttpStatusCode.ServiceUnavailable)
+            } else {
+                call.respondText("ready")
+            }
+        }
         post("/v1/chat") {
-            if (FirebaseApp.getApps().isEmpty() || !providerConfigured()) {
+            call.response.header(HttpHeaders.CacheControl, "no-store")
+            if (!chatReady(config)) {
                 return@post call.respondText(
                     json.encodeToString(ErrorResponse("AI backend is not configured.")),
                     ContentType.Application.Json, HttpStatusCode.ServiceUnavailable
@@ -142,18 +166,27 @@ fun Application.module() {
                 ?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer ")
             if (idToken.isNullOrBlank()) return@post call.respond(HttpStatusCode.Unauthorized)
             val uid = try {
-                withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(idToken).uid }
-            } catch (_: Exception) { return@post call.respond(HttpStatusCode.Unauthorized) }
+                withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(idToken, config.production).uid }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                return@post call.respond(HttpStatusCode.Unauthorized)
+            }
 
-            val bodyText = call.receiveText()
-            if (bodyText.length > 20_000) return@post call.respond(HttpStatusCode.PayloadTooLarge)
+            if ((call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > 20_000L) {
+                return@post call.respond(HttpStatusCode.PayloadTooLarge)
+            }
+            val bodyText = call.boundedBody() ?: return@post call.respond(HttpStatusCode.PayloadTooLarge)
             val req = try { json.decodeFromString<ChatRequest>(bodyText) }
                 catch (_: Exception) { return@post call.respond(HttpStatusCode.BadRequest) }
-            if (req.mood !in supportedMoods || req.messages.isEmpty() || req.messages.size > 12 ||
-                req.messages.any { it.role !in setOf("user", "assistant") || it.content.length !in 1..2000 } ||
-                req.messages.last().role != "user"
-            ) return@post call.respond(HttpStatusCode.BadRequest)
-            if (!withinLimit(uid)) return@post call.respond(HttpStatusCode.TooManyRequests)
+            if (!validChatRequest(req)) return@post call.respond(HttpStatusCode.BadRequest)
+            val allowed = try { limiter.allow(uid) } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                System.err.println("Rate limit storage unavailable; chat request rejected.")
+                return@post call.respond(HttpStatusCode.ServiceUnavailable)
+            }
+            if (!allowed) return@post call.respond(HttpStatusCode.TooManyRequests)
 
             val latestText = req.messages.last().content
             // This emergency keyword check is deliberately conservative and INCOMPLETE.
@@ -165,10 +198,12 @@ fun Application.module() {
                 )), ContentType.Application.Json)
             }
             try {
-                val answer = groqReply(req)
+                val answer = groqReply(req, config)
                 call.respondText(json.encodeToString(ChatResponse(answer)), ContentType.Application.Json)
             } catch (_: ProviderRateLimited) {
                 call.respondText(json.encodeToString(ErrorResponse("AI is busy. Please try again shortly.")), ContentType.Application.Json, HttpStatusCode.TooManyRequests)
+            } catch (cancel: CancellationException) {
+                throw cancel
             } catch (_: Exception) {
                 call.respondText(json.encodeToString(ErrorResponse("AI is temporarily unavailable.")), ContentType.Application.Json, HttpStatusCode.BadGateway)
             }

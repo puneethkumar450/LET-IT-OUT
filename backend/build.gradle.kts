@@ -9,8 +9,10 @@ dependencies {
     implementation("io.ktor:ktor-server-core-jvm:3.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("com.google.firebase:firebase-admin:9.7.0")
+    implementation("com.google.cloud:google-cloud-firestore:3.32.2")
     implementation("ch.qos.logback:logback-classic:1.5.18")
     testImplementation(kotlin("test"))
+    testImplementation("io.ktor:ktor-server-test-host-jvm:3.3.0")
 }
 application { mainClass.set("com.letitout.server.MainKt") }
 kotlin { jvmToolchain(21) }
