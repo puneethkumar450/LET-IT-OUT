@@ -169,27 +169,33 @@ fun RowDivider() = HorizontalDivider(color = AppColors.Divider, thickness = 1.dp
 @Composable
 fun SettingsRow(
     title: String, onClick: () -> Unit, value: String? = null, chevron: Boolean = true,
-    color: Color = AppColors.Ink, bold: Boolean = false
+    color: Color = AppColors.Ink, bold: Boolean = false, detail: String? = null
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(title, Modifier.weight(1f), color = color, fontSize = 16.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = color, fontSize = 16.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
+            detail?.let { Text(it, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp) }
+        }
         value?.let { Text(it, color = AppColors.Primary, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
         if (chevron) Icon(AppIcons.ChevronRight, contentDescription = null, tint = AppColors.Muted, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
-fun ToggleRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, detail: String? = null) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(title, Modifier.weight(1f), fontSize = 16.sp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontSize = 16.sp)
+            detail?.let { Text(it, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp) }
+        }
         Switch(
             checked = checked, onCheckedChange = null,
             colors = SwitchDefaults.colors(

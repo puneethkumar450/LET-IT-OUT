@@ -14,3 +14,4 @@ local.properties
 *.key
 app/google-services.json
 .DS_Store
+reports*.jsonl

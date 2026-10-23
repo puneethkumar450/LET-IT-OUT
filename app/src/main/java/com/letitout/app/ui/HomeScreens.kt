@@ -43,29 +43,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.letitout.app.data.CheckInStats
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPalette
 import com.letitout.app.data.palette
+import java.time.LocalTime
 import kotlin.math.roundToInt
 
 @Composable
 internal fun HomeScreen(
+    state: AppViewModel.UiState,
     onMood: (Mood) -> Unit,
     onJustTalk: () -> Unit,
     onLetsTalk: () -> Unit,
     onNewConversation: () -> Unit,
     onSettings: () -> Unit
 ) {
+    val greeting = if (state.signedIn) greetingFor(LocalTime.now().hour, firstName(state.userName)) else "Hello there"
     ScrollScreen(AppColors.Background, PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Hello there", color = AppColors.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(greeting, Modifier.weight(1f, fill = false), color = AppColors.Muted, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Icon(AppIcons.Heart, contentDescription = null, tint = AppColors.Sky, modifier = Modifier.size(20.dp))
                 }
                 Text("How are you feeling today?", style = DisplayStyle, fontSize = 30.sp, lineHeight = 35.sp, modifier = Modifier.semantics { heading() })
             }
             SquareIconButton(AppIcons.Settings, "Settings", onSettings, size = 42.dp)
+        }
+        if (state.checkInStats.total > 0) {
+            Spacer(Modifier.height(18.dp))
+            InsightCard(state.checkInStats)
         }
         Spacer(Modifier.height(22.dp))
         Mood.entries.filter { it != Mood.TALK }.chunked(2).forEach { row ->
@@ -87,6 +95,43 @@ internal fun HomeScreen(
         PillButton("Let's Talk", onLetsTalk)
         Spacer(Modifier.height(8.dp))
         LinkButton("Start a new conversation", AppColors.Primary, onNewConversation, Modifier.align(Alignment.CenterHorizontally))
+    }
+}
+
+private fun firstName(name: String?): String? = name?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() }
+
+private fun greetingFor(hour: Int, name: String?): String {
+    val who = name?.let { ", $it" }.orEmpty()
+    return when (hour) {
+        in 5..11 -> "Good morning$who"
+        in 12..16 -> "Good afternoon$who"
+        in 17..21 -> "Good evening$who"
+        else -> "Up late$who? Glad you're here."
+    }
+}
+
+// Encouraging, never a score: a low ratio gets a gentle line instead of "1 of your last 9".
+private fun insightText(stats: CheckInStats): String = when {
+    stats.lighter == 0 -> "Some talks take a while to settle, and that's okay. This space is here whenever you need it."
+    stats.total == 1 -> "You felt lighter after your last talk."
+    stats.lighter == stats.total -> "You felt lighter after each of your last ${stats.total} talks."
+    stats.lighter * 2 >= stats.total -> "You felt lighter after ${stats.lighter} of your last ${stats.total} talks."
+    else -> "Some of your talks here have left you feeling lighter. Whatever today brings, you can talk it through."
+}
+
+@Composable
+private fun InsightCard(stats: CheckInStats) {
+    // A white info card like Settings' AccountCard, so it doesn't read as one of the tappable mood tiles below.
+    val palette = Mood.HAPPY.palette()
+    val shape = RoundedCornerShape(22.dp)
+    Row(
+        Modifier.fillMaxWidth().softShadow(AppColors.Ink, shape, 3.dp).background(AppColors.Surface, shape).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(Modifier.size(40.dp).background(palette.tile, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Mood.HAPPY.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+        }
+        Text(insightText(stats), Modifier.weight(1f), color = AppColors.Ink, fontSize = 15.sp, lineHeight = 21.sp)
     }
 }
 

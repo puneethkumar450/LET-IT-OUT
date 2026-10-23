@@ -11,6 +11,7 @@ dependencies {
     implementation("com.google.firebase:firebase-admin:9.7.0")
     implementation("ch.qos.logback:logback-classic:1.5.18")
     testImplementation(kotlin("test"))
+    testImplementation("io.ktor:ktor-server-test-host-jvm:3.3.0")
 }
 application { mainClass.set("com.letitout.server.MainKt") }
 kotlin { jvmToolchain(21) }

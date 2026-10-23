@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.data.Mood
 import com.letitout.app.data.palette
 import kotlinx.coroutines.CancellationException
@@ -187,18 +188,22 @@ private fun PageDots(current: Int, count: Int) {
 
 @Composable
 internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: () -> Unit, onPrivacy: () -> Unit) {
+    val state by vm.state.collectAsStateWithLifecycle()
     val activity = LocalContext.current as Activity
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val configured = vm.auth.isConfigured()
-    fun attempt(fallback: String, action: suspend () -> Unit) {
+    // A guest arriving from Settings is here to switch to Google, so don't offer a second guest session.
+    val guest = state.guest
+    // [action] returns false when the person closed the Google account picker: nothing to show, just stay here.
+    fun attempt(fallback: String, action: suspend () -> Boolean) {
         scope.launch {
             working = true; error = null
-            try { withTimeout(60_000) { action() }; vm.refreshAuth(); onSignedIn() }
-            catch (_: TimeoutCancellationException) { error = "Sign-in took too long. Please try again." }
+            try { if (withTimeout(60_000) { action() }) { vm.refreshAuth(); onSignedIn() } }
+            catch (_: TimeoutCancellationException) { vm.refreshAuth(); error = "Sign-in took too long. Please try again." }
             catch (t: CancellationException) { throw t }
-            catch (t: Exception) { error = t.message ?: fallback }
+            catch (t: Exception) { vm.refreshAuth(); error = t.message ?: fallback } // a failed switch from a guest can leave nobody signed in
             finally { working = false }
         }
     }
@@ -213,22 +218,25 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
         Text("Sign in to keep your preferences across devices, or just start talking as a guest.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
         Spacer(Modifier.height(72.dp))
         OutlinePillButton("Continue with Google", enabled = vm.auth.isGoogleConfigured() && !working, leading = { GoogleBadge() }, onClick = {
-            attempt("Google sign-in didn't complete") { vm.auth.signInGoogle(activity) }
+            attempt("Google sign-in didn't go through. Please try again.") { vm.auth.signInGoogle(activity) }
         })
         Spacer(Modifier.height(14.dp))
-        PillButton("Continue as guest", enabled = configured && !working, onClick = {
-            attempt("Guest sign-in failed") { vm.auth.signInGuest() }
-        })
-        Spacer(Modifier.height(14.dp))
+        if (!guest) {
+            PillButton("Continue as guest", enabled = configured && !working, onClick = {
+                attempt("Couldn't start a guest session just now. Please try again.") { vm.auth.signInGuest(); true }
+            })
+            Spacer(Modifier.height(14.dp))
+        }
         Text(
-            "Guest mode needs no account. You can link Google later in Settings and keep your preferences.",
+            if (guest) "You're a guest right now. Linking Google keeps everything on this phone as it is."
+            else "Guest mode needs no account. You can link Google later in Settings and keep your preferences.",
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
         )
         if (working) {
             Spacer(Modifier.height(16.dp))
             CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).size(28.dp), color = AppColors.Primary, strokeWidth = 3.dp)
         }
-        error?.let { Spacer(Modifier.height(14.dp)); Text(it, color = AppColors.Danger, fontSize = 14.sp, lineHeight = 20.sp) }
+        error?.let { Spacer(Modifier.height(14.dp)); Text(it, color = AppColors.Error, fontSize = 14.sp, lineHeight = 20.sp) }
         if (!configured) {
             Spacer(Modifier.height(20.dp))
             Column(Modifier.fillMaxWidth().background(AppColors.Lavender, RoundedCornerShape(20.dp)).padding(start = 16.dp, top = 14.dp, end = 8.dp, bottom = 4.dp)) {
@@ -237,7 +245,11 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
             }
         } else if (!vm.auth.isGoogleConfigured()) {
             Spacer(Modifier.height(20.dp))
-            Text("Google sign-in is still being set up. You can continue as a guest.", color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp)
+            Text(
+                if (guest) "Linking Google isn't ready in this version yet. You can keep using Let It Out as a guest."
+                else "Google sign-in is still being set up. You can continue as a guest.",
+                color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp
+            )
         }
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(32.dp))

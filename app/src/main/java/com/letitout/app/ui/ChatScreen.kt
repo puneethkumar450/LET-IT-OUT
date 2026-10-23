@@ -45,12 +45,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,7 +76,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -86,11 +90,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.letitout.app.data.ChatMessage
+import com.letitout.app.data.Feeling
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPalette
+import com.letitout.app.data.ReportReason
 import com.letitout.app.data.palette
 import java.util.Locale
+
+private const val TELE_MANAS = "14416"
+private const val SPEECH_MISSED = "Couldn't catch that. Try again, or type it out if that's easier."
+private const val MIC_DENIED = "Microphone access is off. Typing works just as well."
+private const val VOICE_UNAVAILABLE = "Voice input isn't available on this phone, but typing works just as well."
+
+/** Ways of leaving or starting over; each one asks "How are you feeling now?" first when it's due. */
+private enum class ChatExit { HOME, CHANGE_MOOD, END, NEW }
 
 @Composable
 internal fun ChatScreen(
@@ -112,6 +125,9 @@ internal fun ChatScreen(
     var isListening by remember { mutableStateOf(false) }
     var speechEnabled by remember { mutableStateOf(false) }
     var speakingId by remember { mutableStateOf<Long?>(null) }
+    var pendingExit by remember { mutableStateOf<ChatExit?>(null) }
+    var heavierStep by remember { mutableStateOf(false) }
+    var reportTarget by remember { mutableStateOf<String?>(null) }
     val tts = remember { TextToSpeech(context) { result -> speechEnabled = result == TextToSpeech.SUCCESS } }
     DisposableEffect(tts) {
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -134,10 +150,12 @@ internal fun ChatScreen(
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() { isListening = false }
-            override fun onError(error: Int) { isListening = false; speechError = "Speech couldn't be recognized. You can type instead." }
+            override fun onError(error: Int) { isListening = false; speechError = SPEECH_MISSED }
             override fun onResults(results: Bundle?) {
                 isListening = false
-                input = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                // Nothing heard keeps whatever was already typed.
+                val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (heard.isNullOrBlank()) speechError = SPEECH_MISSED else input = heard
             }
             override fun onPartialResults(partialResults: Bundle?) = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -146,14 +164,14 @@ internal fun ChatScreen(
     }
     val startListening: () -> Unit = {
         speechError = null
-        if (recognizer == null) speechError = "Speech recognition is unavailable on this device."
+        if (recognizer == null) speechError = VOICE_UNAVAILABLE
         else recognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
         })
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startListening() else speechError = "Microphone permission denied. You can still type."
+        if (granted) startListening() else speechError = MIC_DENIED
     }
     val toggleMic: () -> Unit = {
         if (isListening) { recognizer?.stopListening(); isListening = false }
@@ -166,10 +184,23 @@ internal fun ChatScreen(
             stopSpeaking()
             vm.send(input)
             input = ""
+            speechError = null
             focusManager.clearFocus()
             keyboard?.hide()
         }
     }
+    val exit: (ChatExit) -> Unit = { action ->
+        when (action) {
+            ChatExit.HOME -> onHome()
+            ChatExit.CHANGE_MOOD -> onChangeMood()
+            ChatExit.END -> { stopSpeaking(); vm.newConversation(); onHome() }
+            ChatExit.NEW -> { stopSpeaking(); speechError = null; vm.newConversation() }
+        }
+    }
+    // After a real conversation, leaving or starting over asks one gentle question first. The ViewModel decides when it's
+    // due (including while the second reply is on its way) and never asks twice in one conversation.
+    val checkDue = state.feelingCheckDue
+    val leave: (ChatExit) -> Unit = { action -> if (checkDue) pendingExit = action else exit(action) }
 
     // Read new replies aloud, but never ones that were already on screen when this page opened.
     val seenUpTo = remember { state.messages.maxOfOrNull { it.id } ?: 0L }
@@ -182,7 +213,7 @@ internal fun ChatScreen(
     }
     val itemCount = 2 + state.messages.size + (if (state.loading) 1 else 0) + (if (state.error != null) 1 else 0)
     LaunchedEffect(itemCount) { listState.animateScrollToItem(itemCount - 1) }
-    BackHandler(onBack = onHome)
+    BackHandler { leave(ChatExit.HOME) }
 
     val supportMode = state.supportMode
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
@@ -191,19 +222,22 @@ internal fun ChatScreen(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
         ) {
-            SquareIconButton(AppIcons.Back, "Back to home", onHome, shadowColor = palette.accent)
-            if (supportMode) {
-                ChipButton("Get human support", onHumanSupport, container = AppColors.Surface, content = AppColors.Primary, icon = AppIcons.Shield)
-                LinkButton("Leave", AppColors.Muted, onHome)
-            } else {
-                ChipButton(state.mood.label, onChangeMood, container = palette.bubble, content = AppColors.Ink, icon = state.mood.icon, iconTint = palette.accent)
-                Box {
-                    SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
-                        DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation() })
-                        DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation(); onHome() })
-                    }
+            SquareIconButton(AppIcons.Back, "Back to home", { leave(ChatExit.HOME) }, shadowColor = palette.accent)
+            ChipButton(
+                state.mood.label, { leave(ChatExit.CHANGE_MOOD) }, container = palette.bubble, content = AppColors.Ink,
+                icon = state.mood.icon, iconTint = palette.accent
+            )
+            Box {
+                SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
+                    DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; leave(ChatExit.NEW) })
+                    DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; leave(ChatExit.END) })
                 }
+            }
+        }
+        if (supportMode) {
+            Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+                ChipButton("Talk to someone", onHumanSupport, container = AppColors.Surface, content = AppColors.Primary, icon = AppIcons.People)
             }
         }
         LazyColumn(
@@ -214,7 +248,7 @@ internal fun ChatScreen(
         ) {
             item {
                 Text(
-                    "Today · Nothing here is saved", Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    "Today · AI companion · Nothing here is saved", Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                 )
             }
@@ -222,10 +256,11 @@ internal fun ChatScreen(
             items(state.messages, key = { it.id }) { message ->
                 val speakingFooter: (@Composable () -> Unit)? =
                     if (speakingId == message.id) { { SpeakingFooter(palette.accent, stopSpeaking) } } else null
-                when {
-                    message.fromUser -> UserBubble(message.text, palette)
-                    message.supportResources -> SupportBubble(message.text, footer = speakingFooter) { dialNumber(context, it) }
-                    else -> AiBubble(palette.accent, footer = speakingFooter) { BubbleText(message.text) }
+                if (message.fromUser) UserBubble(message.text, palette)
+                else Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (message.supportResources) SupportBubble(message.text, footer = speakingFooter) { dialNumber(context, TELE_MANAS) }
+                    else AiBubble(palette.accent, footer = speakingFooter) { BubbleText(message.text) }
+                    ReportButton { reportTarget = message.text }
                 }
             }
             if (state.loading) item { AiBubble(palette.accent) { TypingDots(palette.accent) } }
@@ -240,16 +275,9 @@ internal fun ChatScreen(
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!online) StatusPill("No internet connection", AppColors.Warning)
-            speechError?.let { StatusPill(it, AppColors.Danger) }
-            if (!state.signedIn) {
-                Row(
-                    Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Preview mode · sign in to send messages.", Modifier.weight(1f), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
-                    LinkButton("Sign in", AppColors.Primary, onSignIn)
-                }
-            }
+            speechError?.let { StatusPill(it, AppColors.Error) }
+            state.reportNotice?.let { NoticeRow(it, "OK", vm::dismissReportNotice) }
+            if (!state.signedIn) NoticeRow("Preview mode · sign in to send messages.", "Sign in", onSignIn)
             Composer(
                 input = input, onInputChange = { input = it }, palette = palette,
                 placeholder = if (supportMode) "Keep talking, if you'd like…" else "Say what's on your mind…",
@@ -258,6 +286,37 @@ internal fun ChatScreen(
                 onDone = { focusManager.clearFocus(); keyboard?.hide() }
             )
         }
+    }
+
+    pendingExit?.let { action ->
+        val finish: () -> Unit = { heavierStep = false; pendingExit = null; exit(action) }
+        if (!heavierStep) FeelingCheckDialog(
+            onAnswer = { feeling ->
+                if (feeling == null) vm.skipFeelingCheck() else vm.recordFeeling(feeling)
+                // "Heavier" gets a short, kind word before moving on instead of silence.
+                if (feeling == Feeling.HEAVIER) heavierStep = true else finish()
+            },
+            onDismiss = { pendingExit = null }
+        )
+        else HeavierDialog(showHelpline = supportMode, onCall = { dialNumber(context, TELE_MANAS) }, onDone = finish)
+    }
+    reportTarget?.let { reply ->
+        AlertDialog(
+            onDismissRequest = { reportTarget = null },
+            title = { Text("Report this reply?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Pick what felt wrong. This reply and your reason will be sent to us so we can improve.",
+                        color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp
+                    )
+                    ReportReason.entries.forEach { reason ->
+                        DialogChoice(reason.label) { reportTarget = null; vm.reportReply(reply, reason) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { reportTarget = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -336,6 +395,22 @@ private fun SpeakingFooter(accent: Color, onStop: () -> Unit) {
     }
 }
 
+/** Sits under each companion reply, lined up with the bubble rather than the avatar. */
+@Composable
+private fun ReportButton(onClick: () -> Unit) {
+    Row(Modifier.padding(start = 28.dp)) {
+        Surface(onClick = onClick, shape = CircleShape, color = Color.Transparent, contentColor = AppColors.Muted) {
+            Row(
+                Modifier.heightIn(min = 36.dp).padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(AppIcons.Flag, contentDescription = null, tint = AppColors.Muted, modifier = Modifier.size(13.dp))
+                Text("Report", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
 @Composable
 private fun TypingDots(color: Color) {
     val transition = rememberInfiniteTransition(label = "typing")
@@ -380,31 +455,31 @@ private fun ErrorBubble(message: String, palette: MoodPalette, canEdit: Boolean,
     }
 }
 
+/** A reply that sounded heavy: the reply itself, a soft word about a doctor (unless the reply just said it) and one free line. */
 @Composable
-private fun SupportBubble(text: String, footer: (@Composable () -> Unit)?, onDial: (String) -> Unit) {
+private fun SupportBubble(text: String, footer: (@Composable () -> Unit)?, onCall: () -> Unit) {
+    // Most of these replies already recommend a doctor; don't say it twice in one bubble.
+    val saysDoctor = listOf("doctor", "डॉक्टर", "डाक्टर", "డాక్టర్").any { text.contains(it, ignoreCase = true) }
     val shape = RoundedCornerShape(24.dp, 24.dp, 24.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AiAvatar(AppColors.Primary)
         Column(
             Modifier.weight(1f).softShadow(AppColors.Primary, shape, 4.dp).background(AppColors.Surface, shape).padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             BubbleText(text)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HelplineRow("Tele-MANAS · 14416", "Free, 24/7 mental health support (India)", filled = true) { onDial("14416") }
-                HelplineRow("Emergency · 112", "If you're in immediate danger", filled = false) { onDial("112") }
-            }
-            Text(
-                "Let It Out can't call anyone or alert a person for you. These numbers go to real people. I'm still here if you want to keep talking.",
-                color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp
+            if (!saysDoctor) Text(
+                "Talking to a doctor really is the best next step. If you'd like to talk to someone today, Tele-MANAS is free and open 24x7.",
+                color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp
             )
+            HelplineRow("Tele-MANAS · $TELE_MANAS", "Free · 24x7 · trained counsellors", onCall)
             footer?.let { HorizontalDivider(color = AppColors.Lavender); it() }
         }
     }
 }
 
 @Composable
-private fun HelplineRow(title: String, detail: String, filled: Boolean, onCall: () -> Unit) {
+private fun HelplineRow(title: String, detail: String, onCall: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(Mood.TALK.palette().surface, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -413,13 +488,9 @@ private fun HelplineRow(title: String, detail: String, filled: Boolean, onCall: 
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(detail, color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
         }
-        val content = if (filled) Color.White else AppColors.Primary
-        Surface(
-            onClick = onCall, shape = CircleShape, color = if (filled) AppColors.Primary else AppColors.Surface, contentColor = content,
-            border = if (filled) null else BorderStroke(1.5.dp, AppColors.Primary)
-        ) {
+        Surface(onClick = onCall, shape = CircleShape, color = AppColors.Primary, contentColor = Color.White) {
             Row(Modifier.heightIn(min = 44.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(AppIcons.Phone, contentDescription = null, tint = content, modifier = Modifier.size(16.dp))
+                Icon(AppIcons.Phone, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Text("Call", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -437,6 +508,80 @@ private fun StatusPill(text: String, dot: Color) {
             Text(text, color = AppColors.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
+}
+
+@Composable
+private fun NoticeRow(text: String, action: String, onAction: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
+            .background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text, Modifier.weight(1f).padding(vertical = 8.dp), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        LinkButton(action, AppColors.Primary, onAction)
+    }
+}
+
+/** One tappable answer in a chat dialog; [mood] tints it and adds that mood's icon. */
+@Composable
+private fun DialogChoice(label: String, mood: Mood? = null, onClick: () -> Unit) {
+    val palette = (mood ?: Mood.TALK).palette()
+    Surface(
+        onClick = onClick, shape = RoundedCornerShape(18.dp), color = if (mood != null) palette.tile else palette.surface,
+        contentColor = AppColors.Ink, modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.heightIn(min = 52.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            mood?.let {
+                Box(Modifier.size(34.dp).background(AppColors.Surface, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(it.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                }
+            }
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun FeelingCheckDialog(onAnswer: (Feeling?) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("How are you feeling now?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Compared to when you started. Your answer stays on this phone.", color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp)
+                DialogChoice("Lighter", Mood.HAPPY) { onAnswer(Feeling.LIGHTER) }
+                DialogChoice("About the same", Mood.TALK) { onAnswer(Feeling.SAME) }
+                DialogChoice("Heavier", Mood.SAD) { onAnswer(Feeling.HEAVIER) }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAnswer(null) }) { Text("Skip") } }
+    )
+}
+
+@Composable
+private fun HeavierDialog(showHelpline: Boolean, onCall: () -> Unit, onDone: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Thanks for telling me") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Some talks stir things up before they settle, and that's okay. I'm here whenever you want to talk it through.",
+                    color = AppColors.Ink, fontSize = 15.sp, lineHeight = 22.sp
+                )
+                Text(
+                    if (showHelpline) "If it's been heavy for a while, talking to a doctor really is the best option. Tele-MANAS ($TELE_MANAS) is free and open 24x7."
+                    else "If this heaviness keeps coming back, talking to a doctor really is the best option.",
+                    color = AppColors.Muted, fontSize = 14.sp, lineHeight = 20.sp
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Okay") } },
+        dismissButton = if (showHelpline) { { TextButton(onClick = onCall) { Text("Call $TELE_MANAS") } } } else null
+    )
 }
 
 @Composable

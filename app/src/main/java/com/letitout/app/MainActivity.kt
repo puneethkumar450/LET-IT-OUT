@@ -1,5 +1,6 @@
 package com.letitout.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -40,6 +41,8 @@ class MainActivity : ComponentActivity() {
         val transparent = android.graphics.Color.TRANSPARENT
         enableEdgeToEdge(SystemBarStyle.light(transparent, transparent), SystemBarStyle.light(transparent, transparent))
         super.onCreate(savedInstanceState)
+        // Keep private conversations out of the Recents (app switcher) preview.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(false)
         setContent { LetItOutApp() }
     }
 }
@@ -59,7 +62,7 @@ private val appColorScheme = lightColorScheme(
     surfaceContainerHigh = AppColors.Surface,
     outline = AppColors.Track,
     outlineVariant = AppColors.Divider,
-    error = AppColors.Danger
+    error = AppColors.Error
 )
 
 @Composable
@@ -93,6 +96,7 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                 )
                 "signin" -> SignInScreen(vm, onSignedIn = finishSignIn, onPreview = finishSignIn, onPrivacy = { navigateTo("privacy") })
                 "home" -> HomeScreen(
+                    state,
                     onMood = { mood -> checkInMood = mood; navigateTo("mood") },
                     onJustTalk = { vm.chooseMood(Mood.TALK); navigateTo("chat") },
                     onLetsTalk = { navigateTo("chat") },

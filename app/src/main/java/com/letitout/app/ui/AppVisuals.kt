@@ -42,8 +42,9 @@ object AppColors {
     val Peach = Color(0xFFFFE3D6)
     val Mint = Color(0xFFCFF2E6)
     val Green = Color(0xFF238D7C)
+    val GreenDeep = Color(0xFF1F7F70)   // filled buttons: white text on it passes AA contrast
     val Sky = Color(0xFF70B8FF)
-    val Danger = Color(0xFFC9633F)
+    val Error = Color(0xFFC9633F)
     val Warning = Color(0xFFE0A33D)
 }
 
@@ -151,6 +152,7 @@ object AppIcons {
         lineIcon(circle(9f, 8f, 3.5f), "M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2")
     }
     val Mail by lazy { lineIcon(rect(3f, 5f, 18f, 14f, 3f), "M3 8l9 6 9-6") }
+    val Flag by lazy { lineIcon("M5 21V4", "M5 4h12l-2.5 4.5L17 13H5") }
 }
 
 val Mood.icon: ImageVector
