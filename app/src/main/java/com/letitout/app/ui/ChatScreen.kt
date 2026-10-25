@@ -5,7 +5,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.media.AudioFormat
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -52,10 +55,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +68,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,7 +105,12 @@ import com.letitout.app.data.CompanionChoice
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPalette
 import com.letitout.app.data.palette
+import com.letitout.app.BuildConfig
+import java.io.File
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun ChatScreen(
@@ -121,22 +132,121 @@ internal fun ChatScreen(
     var isListening by remember { mutableStateOf(false) }
     var speechEnabled by remember { mutableStateOf(false) }
     var speakingId by remember { mutableStateOf<Long?>(null) }
+    var liveRequested by remember { mutableStateOf(false) }
+    var liveToken by remember { mutableStateOf<String?>(null) }
+    var liveReady by remember { mutableStateOf(false) }
+    var liveError by remember { mutableStateOf<String?>(null) }
+    var livePrompt by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val main = remember { Handler(Looper.getMainLooper()) }
+    val liveController = remember { LiveAvatarController() }
+    val liveUtterance = remember { AtomicReference<LiveUtterance?>(null) }
+    val currentSpeechId = remember { AtomicReference<String?>(null) }
+    val speechSerial = remember { AtomicLong(0L) }
     val tts = remember { TextToSpeech(context) { result -> speechEnabled = result == TextToSpeech.SUCCESS } }
     DisposableEffect(tts) {
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) { speakingId = utteranceId?.toLongOrNull() }
-            override fun onDone(utteranceId: String?) { if (speakingId == utteranceId?.toLongOrNull()) speakingId = null }
+            override fun onStart(utteranceId: String?) {
+                if (liveUtterance.get()?.id != utteranceId) main.post {
+                    if (currentSpeechId.get() == utteranceId) speakingId = utteranceId?.substringBefore(':')?.toLongOrNull()
+                }
+            }
+            override fun onBeginSynthesis(utteranceId: String?, sampleRateInHz: Int, audioFormat: Int, channelCount: Int) {
+                liveUtterance.get()?.takeIf { it.id == utteranceId }?.let { utterance ->
+                    utterance.resampler = if (audioFormat == AudioFormat.ENCODING_PCM_16BIT) {
+                        runCatching { Pcm16Resampler(sampleRateInHz, channelCount) }.getOrNull()
+                    } else null
+                }
+            }
+            override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                val utterance = liveUtterance.get()?.takeIf { it.id == utteranceId } ?: return
+                val converter = utterance.resampler ?: return
+                if (audio != null) synchronized(converter) {
+                    val pcm = converter.convert(audio)
+                    if (pcm.isNotEmpty()) {
+                        utterance.sentAudio = true
+                        liveController.sendAudio(pcm)
+                    }
+                }
+            }
+            override fun onDone(utteranceId: String?) {
+                val live = liveUtterance.get()?.takeIf { it.id == utteranceId }
+                live?.file?.delete()
+                main.post {
+                    if (live != null) {
+                        if ((live.resampler == null || !live.sentAudio) && liveUtterance.compareAndSet(live, null)) {
+                            tts.language = Locale.getDefault()
+                            tts.speak(live.message.text, TextToSpeech.QUEUE_FLUSH, null, live.id)
+                        } else if (liveUtterance.get() === live) liveController.finishAudio()
+                    } else if (currentSpeechId.compareAndSet(utteranceId, null)) speakingId = null
+                }
+            }
             @Suppress("OVERRIDE_DEPRECATION")
-            override fun onError(utteranceId: String?) { speakingId = null }
-            override fun onStop(utteranceId: String?, interrupted: Boolean) { speakingId = null }
+            override fun onError(utteranceId: String?) {
+                main.post {
+                    liveUtterance.get()?.takeIf { it.id == utteranceId }?.let {
+                        if (liveUtterance.compareAndSet(it, null)) it.file.delete()
+                    }
+                    if (currentSpeechId.compareAndSet(utteranceId, null)) {
+                        speakingId = null
+                        speechError = "Voice playback is unavailable right now."
+                    }
+                }
+            }
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                main.post { if (currentSpeechId.compareAndSet(utteranceId, null)) speakingId = null }
+            }
         })
-        onDispose { tts.stop(); tts.shutdown() }
+        onDispose { liveUtterance.getAndSet(null)?.file?.delete(); tts.stop(); tts.shutdown() }
     }
-    val stopSpeaking: () -> Unit = { tts.stop(); speakingId = null }
+    val stopSpeaking: () -> Unit = {
+        currentSpeechId.set(null)
+        liveUtterance.getAndSet(null)?.file?.delete()
+        liveController.clear()
+        tts.stop()
+        speakingId = null
+    }
+    val stopLive: () -> Unit = {
+        stopSpeaking()
+        liveRequested = false
+        liveReady = false
+        liveToken = null
+    }
+    val startLive: () -> Unit = {
+        liveRequested = true
+        liveError = null
+        scope.launch {
+            try {
+                val token = vm.avatarSessionToken()
+                if (liveRequested) liveToken = token
+            } catch (_: Exception) {
+                if (liveRequested) {
+                    stopLive()
+                    liveError = "Talking avatar is unavailable. The portrait and device voice still work."
+                }
+            }
+        }
+    }
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (speechEnabled) {
+            stopSpeaking()
             tts.language = Locale.getDefault()
-            tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, message.id.toString())
+            val utteranceId = "${message.id}:${speechSerial.incrementAndGet()}"
+            currentSpeechId.set(utteranceId)
+            if (liveReady && !message.supportResources) {
+                val file = runCatching { File.createTempFile("avatar-reply-", ".wav", context.cacheDir) }.getOrNull()
+                if (file == null) tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                else {
+                    val utterance = LiveUtterance(message, file, utteranceId)
+                    liveUtterance.set(utterance)
+                    speakingId = message.id
+                    if (tts.synthesizeToFile(message.text, null, file, utterance.id) != TextToSpeech.SUCCESS) {
+                        liveUtterance.set(null)
+                        file.delete()
+                        tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, utterance.id)
+                    }
+                }
+            } else tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         } else {
             speechError = "Read aloud is unavailable on this device."
         }
@@ -193,8 +303,7 @@ internal fun ChatScreen(
     val latest = state.messages.lastOrNull()
     LaunchedEffect(latest?.id, speechEnabled) {
         if (latest != null && !latest.fromUser && latest.id > seenUpTo && state.settings.readAloud && speechEnabled) {
-            tts.language = Locale.getDefault()
-            tts.speak(latest.text, TextToSpeech.QUEUE_FLUSH, null, latest.id.toString())
+            speakMessage(latest)
         }
     }
     val itemCount = 2 + state.messages.size + (if (state.loading) 1 else 0) + (if (state.error != null) 1 else 0)
@@ -203,17 +312,19 @@ internal fun ChatScreen(
     BackHandler(enabled = !pickerOpen, onBack = onHome)
 
     val supportMode = state.supportMode
+    LaunchedEffect(supportMode) { if (supportMode && liveRequested) stopLive() }
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
     val companion = state.companion
+    val pilotCompanion = companion.gender == "woman" && companion.age == "adult"
     val expression = if (supportMode) "calm" else state.mood.companionExpression()
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     BoxWithConstraints(Modifier.fillMaxSize().background(palette.surface)) {
-        val compactHeader = keyboardVisible || maxHeight < 700.dp
+        val compactHeader = (keyboardVisible || maxHeight < 700.dp) && !liveRequested
         if (pickerOpen) {
             CompanionPickerScreen(
                 selectedGender = companion.gender,
                 selectedAge = companion.age,
-                onSelect = { gender, age -> vm.chooseCompanion(gender, age); pickerOpen = false },
+                onSelect = { gender, age -> stopLive(); vm.chooseCompanion(gender, age); pickerOpen = false },
                 onBack = { pickerOpen = false }
             )
         } else Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
@@ -236,9 +347,18 @@ internal fun ChatScreen(
                         SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
                             if (!supportMode) DropdownMenuItem(text = { Text("Change mood") }, onClick = { menuOpen = false; onChangeMood() })
-                            DropdownMenuItem(text = { Text("Change companion") }, onClick = { menuOpen = false; pickerOpen = true })
-                            DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation() })
-                            DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation(); onHome() })
+                            DropdownMenuItem(text = { Text("Change companion") }, onClick = { menuOpen = false; stopLive(); pickerOpen = true })
+                            if (BuildConfig.LIVE_AVATAR_PILOT && pilotCompanion && state.signedIn && !supportMode) {
+                                DropdownMenuItem(
+                                    text = { Text(if (liveRequested) "Stop talking avatar" else "Try talking avatar") },
+                                    onClick = {
+                                        menuOpen = false
+                                        if (liveRequested) stopLive() else livePrompt = true
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation() })
+                            DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation(); onHome() })
                         }
                     }
                 }
@@ -254,7 +374,7 @@ internal fun ChatScreen(
                             contentDescription = "${companion.age} ${companion.gender} companion"
                         )
                         Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 22.sp)
-                        SmallPillButton("Change", { pickerOpen = true }, AppColors.Surface, palette.accent)
+                        SmallPillButton("Change", { stopLive(); pickerOpen = true }, AppColors.Surface, palette.accent)
                     }
                 } else {
                     Box(
@@ -268,6 +388,39 @@ internal fun ChatScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentDescription = "${companion.age} ${companion.gender} companion showing ${expression}"
                         )
+                        liveToken?.let { token ->
+                            LiveAvatarView(
+                                sessionToken = token,
+                                controller = liveController,
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                onReady = { if (liveRequested && liveToken == token) liveReady = true },
+                                onFailure = {
+                                    if (liveRequested && liveToken == token) {
+                                        val interrupted = liveUtterance.getAndSet(null)
+                                        interrupted?.file?.delete()
+                                        if (interrupted != null && !interrupted.videoStarted) {
+                                            tts.stop()
+                                            val fallbackId = "${interrupted.message.id}:${speechSerial.incrementAndGet()}"
+                                            currentSpeechId.set(fallbackId)
+                                            tts.speak(interrupted.message.text, TextToSpeech.QUEUE_FLUSH, null, fallbackId)
+                                        } else if (interrupted != null) stopSpeaking()
+                                        liveRequested = false
+                                        liveReady = false
+                                        liveToken = null
+                                        liveError = "Talking avatar disconnected. The portrait and device voice still work."
+                                    }
+                                },
+                                onSpeaking = { liveUtterance.get()?.videoStarted = true },
+                                onSilent = {
+                                    liveUtterance.get()?.takeIf { it.videoStarted }?.let {
+                                        if (liveUtterance.compareAndSet(it, null)) {
+                                            it.file.delete()
+                                            if (currentSpeechId.compareAndSet(it.id, null)) speakingId = null
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                     Row(
                         Modifier.fillMaxWidth().padding(top = 7.dp),
@@ -275,7 +428,7 @@ internal fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 26.sp)
-                        SmallPillButton("Change", { pickerOpen = true }, AppColors.Surface, palette.accent)
+                        SmallPillButton("Change", { stopLive(); pickerOpen = true }, AppColors.Surface, palette.accent)
                     }
                     Row(
                         Modifier.padding(top = 7.dp).background(palette.bubble, CircleShape)
@@ -284,7 +437,11 @@ internal fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Box(Modifier.size(7.dp).background(palette.accent, CircleShape))
-                        Text(if (supportMode) "Human support options" else "Listening with care", color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (supportMode) "Human support options" else if (liveReady) "Talking avatar ready"
+                            else if (liveRequested) "Connecting avatar…" else "Listening with care",
+                            color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -326,6 +483,7 @@ internal fun ChatScreen(
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!online) StatusPill("No internet connection", AppColors.Warning)
                 speechError?.let { StatusPill(it, AppColors.Danger) }
+                liveError?.let { StatusPill(it, AppColors.Danger) }
                 if (!state.signedIn) {
                     Row(
                         Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
@@ -345,6 +503,23 @@ internal fun ChatScreen(
             }
         }
     }
+    if (livePrompt) AlertDialog(
+        onDismissRequest = { livePrompt = false },
+        title = { Text("Try a talking avatar?") },
+        text = { Text("Spoken AI replies will be sent as audio to Simli to animate this companion. You can turn it off from the chat menu at any time.") },
+        confirmButton = {
+            TextButton(onClick = { livePrompt = false; startLive() }) { Text("Start") }
+        },
+        dismissButton = {
+            TextButton(onClick = { livePrompt = false }) { Text("Cancel") }
+        }
+    )
+}
+
+private class LiveUtterance(val message: ChatMessage, val file: File, val id: String) {
+    @Volatile var resampler: Pcm16Resampler? = null
+    @Volatile var videoStarted: Boolean = false
+    @Volatile var sentAudio: Boolean = false
 }
 
 private fun Mood.companionExpression(): String = when (this) {

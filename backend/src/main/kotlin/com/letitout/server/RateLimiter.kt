@@ -35,9 +35,13 @@ internal class LocalRateLimiter(private val perUserLimit: Int, private val globa
 }
 
 /** Atomic shared limits across Cloud Run instances. No raw UID or chat text is stored. */
-internal class FirestoreRateLimiter(private val perUserLimit: Int, private val globalLimit: Int) : RateLimiter {
+internal class FirestoreRateLimiter(
+    private val perUserLimit: Int,
+    private val globalLimit: Int,
+    collectionName: String = "chat_rate_limits"
+) : RateLimiter {
     private val firestore = FirestoreClient.getFirestore()
-    private val collection = firestore.collection("chat_rate_limits")
+    private val collection = firestore.collection(collectionName)
 
     override suspend fun allow(uid: String): Boolean = withContext(Dispatchers.IO) {
         val hour = Instant.now().epochSecond / 3600

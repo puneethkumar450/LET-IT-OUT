@@ -1,0 +1,79 @@
+package com.letitout.server
+
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.testing.testApplication
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class AvatarRouteTest {
+    private val config = ServerConfig.fromEnvironment(emptyMap())
+
+    @Test fun sessionRequiresAuthAndNeverExposesProviderKey() = testApplication {
+        var providerCalls = 0
+        application {
+            module(config, avatarDependencies = AvatarDependencies(
+                ready = { true },
+                verifyUid = { token, _ -> if (token == "valid") "user-1" else error("bad token") },
+                createSession = { providerCalls++; "temporary-session-token" },
+                rateLimiter = { allowAll() }
+            ))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/avatar/session").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/v1/avatar/session") {
+            header(HttpHeaders.Authorization, "Bearer invalid")
+        }.status)
+        assertEquals(0, providerCalls)
+
+        val response = client.post("/v1/avatar/session") { header(HttpHeaders.Authorization, "Bearer valid") }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("no-store", response.headers[HttpHeaders.CacheControl])
+        assertTrue(response.bodyAsText().contains("temporary-session-token"))
+        assertFalse(response.bodyAsText().contains("faceId"))
+        assertEquals(1, providerCalls)
+    }
+
+    @Test fun rateLimitAndProviderFailureDoNotIssueTokens() = testApplication {
+        application {
+            module(config, avatarDependencies = AvatarDependencies(
+                ready = { true },
+                verifyUid = { _, _ -> "user-1" },
+                createSession = { error("secret provider diagnostic") },
+                rateLimiter = { allowAll() }
+            ))
+        }
+        val response = client.post("/v1/avatar/session") { header(HttpHeaders.Authorization, "Bearer valid") }
+        assertEquals(HttpStatusCode.BadGateway, response.status)
+        assertFalse(response.bodyAsText().contains("secret"))
+    }
+
+    @Test fun rateLimitRejectsSessionBeforeProviderCall() = testApplication {
+        var providerCalls = 0
+        application {
+            module(config, avatarDependencies = AvatarDependencies(
+                ready = { true },
+                verifyUid = { _, _ -> "user-1" },
+                createSession = { providerCalls++; "unused" },
+                rateLimiter = { object : RateLimiter { override suspend fun allow(uid: String) = false } }
+            ))
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, client.post("/v1/avatar/session") {
+            header(HttpHeaders.Authorization, "Bearer valid")
+        }.status)
+        assertEquals(0, providerCalls)
+    }
+
+    @Test fun disabledPilotRejectsSessionBeforeAuth() = testApplication {
+        application { module(config) }
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.post("/v1/avatar/session").status)
+    }
+
+    private fun allowAll(): RateLimiter = object : RateLimiter {
+        override suspend fun allow(uid: String) = true
+    }
+}

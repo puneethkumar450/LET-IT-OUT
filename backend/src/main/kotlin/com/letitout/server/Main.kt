@@ -78,7 +78,7 @@ private fun setupFirebase(config: ServerConfig) {
 private fun chatReady(config: ServerConfig): Boolean =
     config.chatEnabled && config.groqApiKey != null && FirebaseApp.getApps().isNotEmpty()
 
-private suspend fun verifiedUid(idToken: String, config: ServerConfig): String =
+internal suspend fun verifiedUid(idToken: String, config: ServerConfig): String =
     withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(idToken, config.production).uid }
 
 private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = withContext(Dispatchers.IO) {
@@ -155,9 +155,14 @@ private suspend fun ApplicationCall.boundedBody(maxBytes: Int = 20_000): String?
     return output.toString(StandardCharsets.UTF_8)
 }
 
-internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironment(), dependencies: ChatDependencies = ChatDependencies()) {
+internal fun Application.module(
+    config: ServerConfig = ServerConfig.fromEnvironment(),
+    dependencies: ChatDependencies = ChatDependencies(),
+    avatarDependencies: AvatarDependencies = AvatarDependencies()
+) {
     val limiter: RateLimiter by lazy { dependencies.rateLimiter(config) }
     routing {
+        registerAvatarRoutes(config, avatarDependencies)
         get("/health") { call.respondText("ok") }
         get("/ready") {
             if (!dependencies.ready(config)) {

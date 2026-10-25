@@ -35,6 +35,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "WEB_CLIENT_ID", "\"${project.findProperty("webClientId") ?: ""}\"")
         buildConfigField("String", "API_BASE_URL", "\"${project.findProperty("apiBaseUrl") ?: "http://10.0.2.2:8080/"}\"")
+        buildConfigField("boolean", "LIVE_AVATAR_PILOT", (project.findProperty("liveAvatarPilot") == "true").toString())
     }
     if (hasReleaseSigning) {
         signingConfigs.create("release") {
@@ -68,6 +69,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
+    implementation("androidx.webkit:webkit:1.13.0")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("com.google.dagger:hilt-android:2.57.2")
     kapt("com.google.dagger:hilt-android-compiler:2.57.2")

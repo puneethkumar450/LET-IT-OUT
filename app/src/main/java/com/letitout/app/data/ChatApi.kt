@@ -26,10 +26,14 @@ interface ChatApi {
         @Header("Authorization") authorization: String,
         @Body request: ChatRequest
     ): ChatResponse
+
+    @POST("v1/avatar/session")
+    suspend fun avatarSession(@Header("Authorization") authorization: String): AvatarSessionResponse
 }
 
 @Singleton
 class ChatRepository @Inject constructor(private val api: ChatApi, private val tokenProvider: SessionTokenProvider) {
+    suspend fun avatarSessionToken(): String = api.avatarSession("Bearer ${tokenProvider.idToken()}").sessionToken
     suspend fun reply(mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null): ChatResponse {
         val idToken = tokenProvider.idToken()
         return api.chat(

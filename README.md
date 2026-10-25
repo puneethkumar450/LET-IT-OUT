@@ -33,6 +33,8 @@ cd LET-IT-OUT
 
 The Gradle 8.13 wrapper is included. Do not commit `local.properties` or API keys.
 
+For the optional one-avatar talking pilot, see [docs/LIVE_AVATAR_PILOT.md](docs/LIVE_AVATAR_PILOT.md).
+
 For an emulator, create `local.properties` with the Android SDK path. The debug build defaults to `http://10.0.2.2:8080/`:
 
 ```properties

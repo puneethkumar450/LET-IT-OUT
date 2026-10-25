@@ -31,3 +31,4 @@ data class ChatMessage(val id: Long, val text: String, val fromUser: Boolean, va
 data class ApiMessage(val role: String, val content: String)
 data class ChatRequest(val mood: String, val messages: List<ApiMessage>, val intensity: Int? = null)
 data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
+data class AvatarSessionResponse(val sessionToken: String)

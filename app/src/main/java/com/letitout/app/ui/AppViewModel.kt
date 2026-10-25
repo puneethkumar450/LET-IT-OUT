@@ -114,6 +114,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun setReadAloud(enabled: Boolean) { viewModelScope.launch { preferences.setReadAloud(enabled) } }
+    suspend fun avatarSessionToken(): String = repository.avatarSessionToken()
     fun setVoiceInput(enabled: Boolean) { viewModelScope.launch { preferences.setVoiceInput(enabled) } }
     fun setFollowMoodTheme(enabled: Boolean) { viewModelScope.launch { preferences.setFollowMoodTheme(enabled) } }
     fun finishOnboarding() { viewModelScope.launch { preferences.setOnboarded() } }

@@ -76,10 +76,22 @@ class ChatRepositoryTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test fun avatarSessionUsesFirebaseAuthorizationAndReceivesOnlyShortLivedToken() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"sessionToken":"short-lived"}"""))
+        assertEquals("short-lived", repository().avatarSessionToken())
+        val request = server.takeRequest()
+        assertEquals("/v1/avatar/session", request.path)
+        assertEquals("Bearer test-token", request.getHeader("Authorization"))
+        assertEquals(0, request.body.size)
+    }
+
     @Test fun missingSessionNeverSendsPrivateConversation() {
         val api = object : ChatApi {
             override suspend fun chat(authorization: String, request: ChatRequest): ChatResponse {
                 throw AssertionError("Chat request must not run without a session")
+            }
+            override suspend fun avatarSession(authorization: String): AvatarSessionResponse {
+                throw AssertionError("Avatar request must not run without a session")
             }
         }
         val repository = ChatRepository(api, object : SessionTokenProvider {
