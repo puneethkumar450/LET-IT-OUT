@@ -12,6 +12,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProductionBackendTest {
+    @Test fun pilotFaceIdOverridesEarlierCompanionFaceSetting() {
+        val config = ServerConfig.fromEnvironment(mapOf(
+            "SIMLI_FACE_ID_PILOT" to "template/generation",
+            "SIMLI_FACE_ID_WOMAN_ADULT" to "old-face"
+        ))
+        assertEquals("template/generation", config.simliFaceId)
+    }
+
     @Test fun productionDefaultsToChatDisabledAndRequiresProject() {
         val config = ServerConfig.fromEnvironment(mapOf("APP_ENV" to "production", "FIREBASE_PROJECT_ID" to "let-it-out-d661a"))
         assertFalse(config.chatEnabled)

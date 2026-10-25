@@ -427,7 +427,7 @@ internal fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 26.sp)
+                        Text(if (liveReady) "Live demo avatar" else "Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 26.sp)
                         SmallPillButton("Change", { stopLive(); pickerOpen = true }, AppColors.Surface, palette.accent)
                     }
                     Row(
@@ -438,7 +438,7 @@ internal fun ChatScreen(
                     ) {
                         Box(Modifier.size(7.dp).background(palette.accent, CircleShape))
                         Text(
-                            if (supportMode) "Human support options" else if (liveReady) "Talking avatar ready"
+                            if (supportMode) "Human support options" else if (liveReady) "Demo avatar ready"
                             else if (liveRequested) "Connecting avatar…" else "Listening with care",
                             color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold
                         )
@@ -506,7 +506,7 @@ internal fun ChatScreen(
     if (livePrompt) AlertDialog(
         onDismissRequest = { livePrompt = false },
         title = { Text("Try a talking avatar?") },
-        text = { Text("Spoken AI replies will be sent as audio to Simli to animate this companion. You can turn it off from the chat menu at any time.") },
+        text = { Text("This live demo avatar has a different face from your selected portrait. Spoken AI replies are sent as audio to Simli for lip sync. Turn it off anytime from the chat menu.") },
         confirmButton = {
             TextButton(onClick = { livePrompt = false; startLive() }) { Text("Start") }
         },

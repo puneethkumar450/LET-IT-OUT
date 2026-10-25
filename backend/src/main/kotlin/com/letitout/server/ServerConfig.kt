@@ -34,7 +34,8 @@ internal data class ServerConfig(
             val apiKey = env["GROQ_API_KEY"]?.trim()?.takeIf { it.isNotEmpty() }
             val model = env["GROQ_MODEL"]?.trim()?.takeIf { it.isNotEmpty() } ?: "openai/gpt-oss-120b"
             val simliApiKey = env["SIMLI_API_KEY"]?.trim()?.takeIf { it.isNotEmpty() }
-            val simliFaceId = env["SIMLI_FACE_ID_WOMAN_ADULT"]?.trim()?.takeIf { it.isNotEmpty() }
+            val simliFaceId = (env["SIMLI_FACE_ID_PILOT"] ?: env["SIMLI_FACE_ID_WOMAN_ADULT"])
+                ?.trim()?.takeIf { it.isNotEmpty() }
             if (production) {
                 require(projectId != null) { "FIREBASE_PROJECT_ID is required in production" }
                 if (chatEnabled) require(apiKey != null) { "GROQ_API_KEY is required when production chat is enabled" }
