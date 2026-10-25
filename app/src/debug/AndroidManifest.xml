@@ -3,5 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
     <application
         android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic" />
+        tools:replace="android:usesCleartextTraffic">
+        <activity
+            android:name="com.letitout.app.ui.CompanionPickerHostActivity"
+            android:exported="false" />
+    </application>
 </manifest>

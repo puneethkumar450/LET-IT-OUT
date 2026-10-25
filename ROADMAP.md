@@ -19,8 +19,8 @@ Legend: ✅ implemented in source (verification noted separately) · 🔧 incomp
 - 🔧 Voice recognition and read-aloud behavior across devices
 - 🔧 Broader safe/unsafe fictional conversation testing with Groq; prototype keyword routing is not a validated safety system
 - 🔧 Improve user experience, onboarding retention, accessibility and dark mode
-- ✅ Android repository HTTP contract tests and an emulator test for preference persistence/reset
-- 🔧 Add ViewModel/UI tests and broader interaction/accessibility instrumentation tests
+- ✅ Android repository HTTP contract tests and emulator tests for preference reset and accessible companion-picker selection
+- 🔧 Add ViewModel tests and broader chat/onboarding interaction and accessibility tests
 - 🔧 Complete account lifecycle, reauthentication and deletion policy; local preferences are cleared after confirmed account deletion
 - 🔧 Add production-grade safety evaluation with mental-health expert
 
