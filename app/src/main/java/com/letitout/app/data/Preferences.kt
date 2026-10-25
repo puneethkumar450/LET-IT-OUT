@@ -70,6 +70,10 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     suspend fun clearMood() {
         context.dataStore.edit { it.remove(moodKey) }
     }
+    /** Remove every preference associated with this installation after account deletion. */
+    suspend fun clearAll() {
+        context.dataStore.edit { it.clear() }
+    }
     suspend fun setReadAloud(enabled: Boolean) = set(readAloudKey, enabled)
     suspend fun setVoiceInput(enabled: Boolean) = set(voiceInputKey, enabled)
     suspend fun setFollowMoodTheme(enabled: Boolean) = set(followMoodKey, enabled)

@@ -296,7 +296,7 @@ internal fun ChatScreen(
             ) {
                 item {
                     Text(
-                        "Today · Nothing here is saved", Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        "Today · Chat isn't saved on this device", Modifier.fillMaxWidth().padding(bottom = 6.dp),
                         color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                     )
                 }

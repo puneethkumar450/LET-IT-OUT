@@ -78,6 +78,9 @@ private fun setupFirebase(config: ServerConfig) {
 private fun chatReady(config: ServerConfig): Boolean =
     config.chatEnabled && config.groqApiKey != null && FirebaseApp.getApps().isNotEmpty()
 
+private suspend fun verifiedUid(idToken: String, config: ServerConfig): String =
+    withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(idToken, config.production).uid }
+
 private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = withContext(Dispatchers.IO) {
     val apiKey = requireNotNull(config.groqApiKey)
     val recent = req.messages.takeLast(12)
@@ -116,6 +119,17 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
 private class ProviderUnavailable : RuntimeException()
 private class ProviderRateLimited : RuntimeException()
 
+/** The production integrations remain the defaults; tests can exercise the HTTP route without secrets. */
+internal data class ChatDependencies(
+    val ready: (ServerConfig) -> Boolean = ::chatReady,
+    val verifyUid: suspend (String, ServerConfig) -> String = ::verifiedUid,
+    val reply: suspend (ChatRequest, ServerConfig) -> String = ::groqReply,
+    val rateLimiter: (ServerConfig) -> RateLimiter = { config ->
+        if (config.production) FirestoreRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
+        else LocalRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
+    }
+)
+
 fun main() {
     val config = ServerConfig.fromEnvironment()
     setupFirebase(config)
@@ -141,15 +155,12 @@ private suspend fun ApplicationCall.boundedBody(maxBytes: Int = 20_000): String?
     return output.toString(StandardCharsets.UTF_8)
 }
 
-internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironment()) {
-    val limiter: RateLimiter by lazy {
-        if (config.production) FirestoreRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
-        else LocalRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
-    }
+internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironment(), dependencies: ChatDependencies = ChatDependencies()) {
+    val limiter: RateLimiter by lazy { dependencies.rateLimiter(config) }
     routing {
         get("/health") { call.respondText("ok") }
         get("/ready") {
-            if (!chatReady(config)) {
+            if (!dependencies.ready(config)) {
                 call.respond(HttpStatusCode.ServiceUnavailable)
             } else {
                 call.respondText("ready")
@@ -157,7 +168,7 @@ internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironm
         }
         post("/v1/chat") {
             call.response.header(HttpHeaders.CacheControl, "no-store")
-            if (!chatReady(config)) {
+            if (!dependencies.ready(config)) {
                 return@post call.respondText(
                     json.encodeToString(ErrorResponse("AI backend is not configured.")),
                     ContentType.Application.Json, HttpStatusCode.ServiceUnavailable
@@ -167,7 +178,7 @@ internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironm
                 ?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer ")
             if (idToken.isNullOrBlank()) return@post call.respond(HttpStatusCode.Unauthorized)
             val uid = try {
-                withContext(Dispatchers.IO) { FirebaseAuth.getInstance().verifyIdToken(idToken, config.production).uid }
+                dependencies.verifyUid(idToken, config)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
@@ -199,7 +210,7 @@ internal fun Application.module(config: ServerConfig = ServerConfig.fromEnvironm
                 )), ContentType.Application.Json)
             }
             try {
-                val answer = groqReply(req, config)
+                val answer = dependencies.reply(req, config)
                 call.respondText(json.encodeToString(ChatResponse(answer)), ContentType.Application.Json)
             } catch (_: ProviderRateLimited) {
                 call.respondText(json.encodeToString(ErrorResponse("AI is busy. Please try again shortly.")), ContentType.Application.Json, HttpStatusCode.TooManyRequests)

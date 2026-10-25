@@ -1,6 +1,6 @@
 # LET IT GO — versioned delivery plan
 
-Legend: ✅ source scaffold exists · 🔧 unverified/in progress · ⬜ not implemented
+Legend: ✅ implemented in source (verification noted separately) · 🔧 incomplete or not fully verified · ⬜ not implemented. This is a developer plan, not a public-release checklist.
 
 ## v0.1.0 — Android developer MVP
 
@@ -11,12 +11,17 @@ Legend: ✅ source scaffold exists · 🔧 unverified/in progress · ⬜ not imp
 - ✅ Simple user-editable STT transcripts + opt-in TTS playback
 - ✅ Error/loading/retry/clear handling, limited prototype safety routing
 - ✅ Basic privacy and support resources; no analytics or advertisements
-- 🔧 Build and test in a connected Android Studio environment; fix issues found
-- 🔧 Configure Firebase Android and backend Admin SDK; verify sign-in and guest upgrade
-- 🔧 Configure Groq and test safe/unsafe fictional conversations
+- ✅ Adult companion picker, persisted portrait choice, and static mood-driven expressions
+- ✅ Local debug/release builds and Pixel 9 Pro emulator visual check of chat, companion selection, and keyboard layout
+- ✅ Development Firebase Android/Admin credentials configured; guest sign-in, guest upgrade, and an AI reply previously verified on an emulator
+- ✅ Local backend health/readiness/auth rejection checks and HTTP route tests
+- 🔧 Fresh Google sign-in, account collision handling, and complete auth flow on a physical device
+- 🔧 Voice recognition and read-aloud behavior across devices
+- 🔧 Broader safe/unsafe fictional conversation testing with Groq; prototype keyword routing is not a validated safety system
 - 🔧 Improve user experience, onboarding retention, accessibility and dark mode
-- 🔧 Add ViewModel/repository UI unit tests and meaningful instrumentation tests
-- 🔧 Implement real account lifecycle, reauthentication and complete deletion policy
+- ✅ Android repository HTTP contract tests and an emulator test for preference persistence/reset
+- 🔧 Add ViewModel/UI tests and broader interaction/accessibility instrumentation tests
+- 🔧 Complete account lifecycle, reauthentication and deletion policy; local preferences are cleared after confirmed account deletion
 - 🔧 Add production-grade safety evaluation with mental-health expert
 
 ## v0.2.0 — Wellness UX
@@ -50,8 +55,9 @@ Legend: ✅ source scaffold exists · 🔧 unverified/in progress · ⬜ not imp
 
 ## v2.1.0 — iOS and marketing
 
-- ⬜ iOS app, App Store links; LET IT GO custom domain
-- ✅ Single-page website preview in `web/` (not an app launch or custom-domain deployment)
+- ⬜ iOS app and App Store links
+- ✅ LET IT GO landing page at `https://let-it-go.in/` over HTTPS
+- ✅ Single-page website preview in `web/` (not a functional browser app)
 - ⬜ Instagram/Facebook, YouTube/Google, region-appropriate social ad creative
 - ⬜ Ad attribution without sensitive mood or chat data
 - ⬜ Monetization only after considering well-being and data privacy impacts

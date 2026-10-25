@@ -238,7 +238,7 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
         Spacer(Modifier.height(56.dp))
         Text("Welcome", style = DisplayStyle, fontSize = 32.sp, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(10.dp))
-        Text("Sign in to keep your preferences across devices, or just start talking as a guest.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
+        Text("Continue with Google or as a guest. Your mood and companion choices stay on this device.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
         Spacer(Modifier.height(72.dp))
         OutlinePillButton("Continue with Google", enabled = vm.auth.isGoogleConfigured() && !working, leading = { GoogleBadge() }, onClick = {
             attempt("Google sign-in didn't complete") { vm.auth.signInGoogle(activity) }
@@ -249,7 +249,7 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
         })
         Spacer(Modifier.height(14.dp))
         Text(
-            "Guest mode needs no account. You can link Google later in Settings and keep your preferences.",
+            "Guest mode doesn't ask for your name or email. You can connect Google later in Settings.",
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
         )
         if (working) {
@@ -275,16 +275,14 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(AppIcons.ShieldCheck, contentDescription = null, tint = AppColors.Green, modifier = Modifier.size(24.dp))
-            Text("We never see your Google password. Sign-in\nonly shares your name and email with\nLet It Go.", fontSize = 13.sp, lineHeight = 18.sp)
+            Text("We don't receive your Google password.\nGoogle and Firebase handle sign-in; app\npreferences remain on this device.", fontSize = 13.sp, lineHeight = 18.sp)
         }
         Spacer(Modifier.height(16.dp))
         val linkStyle = TextLinkStyles(SpanStyle(color = AppColors.Primary, fontWeight = FontWeight.Bold))
         Text(
             buildAnnotatedString {
-                append("By continuing you agree to the ")
-                withLink(LinkAnnotation.Clickable("terms", linkStyle) { onPrivacy() }) { append("Terms") }
-                append(" and ")
-                withLink(LinkAnnotation.Clickable("privacy", linkStyle) { onPrivacy() }) { append("Privacy Policy") }
+                append("Read about message processing in ")
+                withLink(LinkAnnotation.Clickable("privacy-help", linkStyle) { onPrivacy() }) { append("Privacy & Help") }
                 append(". Let It Go is for adults 18 and older.")
             },
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center

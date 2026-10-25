@@ -91,15 +91,16 @@ Response:
 
 ## 5. Existing limitations
 
+- Local verification on 25 October 2026: debug and release APK builds passed; three Android chat HTTP contract tests, one emulator preference persistence/reset test, and backend route tests passed. The backend answered `/health` and `/ready` locally and rejected an unauthenticated chat request. This does not verify production hosting or safety.
 - The debug build, anonymous guest sign-in, guest-to-Google linking, and real AI replies were verified on an emulator. Fresh Google sign-in, voice recognition, and physical-device behavior remain unverified.
-- Account deletion may require recent Firebase reauthentication. For a production service, implement complete user-data erasure wherever data is retained.
+- After confirmed Firebase account deletion, the app clears in-memory conversation data and all local preferences. Deletion may still require recent Firebase reauthentication. For a production service, implement a complete user-data erasure policy wherever data is retained.
 - Guest-to-Google account upgrade is implemented using Firebase credential linking; it needs collision-handling tests.
 - Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
 - Prototype safety screening uses a few phrases and can miss many crisis situations. Do not release publicly until replaced/reviewed by appropriate experts.
 - Built-in Android TTS voice quality and STT languages vary by device. STT might send audio to the device's selected speech-service provider.
 - Companion portraits are static expression images; lip sync and live facial animation are not implemented.
 - No ad SDK is integrated. Acquisition planning is in `docs/MARKETING_PLAN.md`.
-- A static website now lives in `web/` as a private landing-page preview; iOS is a future milestone. The website's mood interaction is illustrative and does not connect to AI chat.
+- A static landing page lives in `web/` and is served at `https://let-it-go.in/`; iOS is a future milestone. The website's mood interaction is illustrative and does not connect to AI chat.
 - Production backend packaging and shared limits are prepared, but the clinically reviewed safety routing and privacy review are still outstanding. Production chat remains disabled by default.
 
 ## 6. Next tasks

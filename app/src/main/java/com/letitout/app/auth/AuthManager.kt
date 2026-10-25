@@ -14,8 +14,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.letitout.app.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -74,13 +75,14 @@ class AuthManager @Inject constructor(@ApplicationContext private val context: C
     }
 
     private suspend fun clearGoogleCredentialState() {
-        try {
-            CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (error: Exception) {
-            // Firebase sign-out/deletion has already succeeded. Credential providers are optional.
-            Log.w("AuthManager", "Could not clear the Google credential state", error)
+        withContext(NonCancellable) {
+            try {
+                CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+            } catch (error: Exception) {
+                // Firebase sign-out/deletion has already succeeded. This optional provider cleanup
+                // must not turn a completed account change into a reported failure or skip local erasure.
+                Log.w("AuthManager", "Could not clear the Google credential state", error)
+            }
         }
     }
 

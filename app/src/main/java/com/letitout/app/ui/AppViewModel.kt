@@ -12,11 +12,14 @@ import com.letitout.app.data.MoodPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
@@ -89,7 +92,20 @@ class AppViewModel @Inject constructor(
     /** Clears the in-memory conversation and the remembered mood; settings are kept. */
     fun clearDeviceData() {
         newConversation()
+        _state.update { it.copy(mood = Mood.TALK, intensity = null) }
         viewModelScope.launch { preferences.clearMood() }
+    }
+
+    /** Called only after Firebase confirms deletion; waits for local data to be removed. */
+    suspend fun clearAllLocalData() = withContext(NonCancellable) {
+        replyJob?.cancelAndJoin()
+        preferences.clearAll()
+        _state.update {
+            it.copy(
+                mood = Mood.TALK, intensity = null, messages = emptyList(), loading = false,
+                error = null, companion = CompanionChoice(), settings = AppSettings()
+            )
+        }
     }
 
     fun setReadAloud(enabled: Boolean) { viewModelScope.launch { preferences.setReadAloud(enabled) } }

@@ -29,15 +29,9 @@ interface ChatApi {
 }
 
 @Singleton
-class ChatRepository @Inject constructor(private val api: ChatApi, @ApplicationContext private val context: Context) {
+class ChatRepository @Inject constructor(private val api: ChatApi, private val tokenProvider: SessionTokenProvider) {
     suspend fun reply(mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null): ChatResponse {
-        if (FirebaseApp.getApps(context).isEmpty()) {
-            throw IllegalStateException("Firebase setup is required before AI chat can connect.")
-        }
-        val user = FirebaseAuth.getInstance().currentUser
-            ?: throw IllegalStateException("Please sign in or continue as a guest first.")
-        val idToken = user.getIdToken(false).await().token
-            ?: throw IllegalStateException("Could not retrieve sign-in token.")
+        val idToken = tokenProvider.idToken()
         return api.chat(
             "Bearer $idToken",
             ChatRequest(mood.name, conversation.takeLast(12).map {
@@ -47,9 +41,29 @@ class ChatRepository @Inject constructor(private val api: ChatApi, @ApplicationC
     }
 }
 
+interface SessionTokenProvider {
+    suspend fun idToken(): String
+}
+
+@Singleton
+class FirebaseSessionTokenProvider @Inject constructor(@ApplicationContext private val context: Context) : SessionTokenProvider {
+    override suspend fun idToken(): String {
+        if (FirebaseApp.getApps(context).isEmpty()) {
+            throw IllegalStateException("Firebase setup is required before AI chat can connect.")
+        }
+        val user = FirebaseAuth.getInstance().currentUser
+            ?: throw IllegalStateException("Please sign in or continue as a guest first.")
+        return user.getIdToken(false).await().token
+            ?: throw IllegalStateException("Could not retrieve sign-in token.")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+    @Provides @Singleton
+    fun provideSessionTokenProvider(provider: FirebaseSessionTokenProvider): SessionTokenProvider = provider
+
     @Provides @Singleton
     fun provideApi(): ChatApi = Retrofit.Builder()
         .baseUrl(BuildConfig.API_BASE_URL)

@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.BuildConfig
 import com.letitout.app.data.Mood
 import com.letitout.app.data.palette
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private enum class SettingsDialog { THEME, CLEAR_DATA, DELETE_ACCOUNT }
@@ -82,9 +83,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         }
         Spacer(Modifier.height(16.dp))
         SettingsGroup("Privacy & data") {
-            SettingsRow("Privacy policy", onPrivacy)
-            RowDivider()
-            SettingsRow("Terms of use", onPrivacy)
+            SettingsRow("Privacy & Help", onPrivacy)
             RowDivider()
             SettingsRow("Delete conversation data on this device", { dialog = SettingsDialog.CLEAR_DATA })
         }
@@ -98,7 +97,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
                     }
                 })
                 RowDivider()
-                SettingsRow("Delete account and data", { dialog = SettingsDialog.DELETE_ACCOUNT }, chevron = false, color = AppColors.Danger, bold = true)
+                SettingsRow("Delete account and device data", { dialog = SettingsDialog.DELETE_ACCOUNT }, chevron = false, color = AppColors.Danger, bold = true)
             }
         }
         status?.let { Spacer(Modifier.height(14.dp)); Text(it, color = AppColors.Danger, fontSize = 14.sp, lineHeight = 20.sp) }
@@ -137,13 +136,30 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         SettingsDialog.DELETE_ACCOUNT -> AlertDialog(
             onDismissRequest = close,
             title = { Text("Delete your account?") },
-            text = { Text("This permanently removes your sign-in account and clears conversation data on this device. Conversations aren't stored on our server.") },
+            text = { Text("This permanently removes your sign-in account, the current conversation, and all saved app preferences on this device. Conversations aren't stored on our server.") },
             confirmButton = {
                 TextButton(onClick = {
                     close()
                     scope.launch {
-                        try { vm.auth.deleteAccount(); vm.clearDeviceData(); vm.refreshAuth(); onSignedOut() }
-                        catch (t: Exception) { status = t.message ?: "Deletion could not be completed. Please sign in again and retry." }
+                        try {
+                            vm.auth.deleteAccount()
+                        } catch (cancel: CancellationException) {
+                            throw cancel
+                        } catch (t: Exception) {
+                            status = t.message ?: "Account deletion could not be completed. Please sign in again and retry."
+                            return@launch
+                        }
+                        try {
+                            vm.clearAllLocalData()
+                        } catch (cancel: CancellationException) {
+                            throw cancel
+                        } catch (_: Exception) {
+                            vm.refreshAuth()
+                            status = "Your account was deleted, but app preferences could not be cleared. Clear this app's storage in Android Settings."
+                            return@launch
+                        }
+                        vm.refreshAuth()
+                        onSignedOut()
                     }
                 }) { Text("Delete", color = AppColors.Danger) }
             },
@@ -200,8 +216,8 @@ private val helpTopics = listOf(
         "Your messages are sent to our server and an AI provider so a reply can be written. Don't share anything you aren't comfortable sending to those services."),
     HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Mood, settings on your device — not\nconversations",
         "Your selected mood and settings stay on this device. We don't save chat history on our server, and a conversation is cleared when you close the app."),
-    HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat, wipe this device, or delete\nyour account",
-        "Start a new conversation from the ⋯ menu in a chat, clear conversation data on this device in Settings, or delete your account in Settings › Account."),
+    HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat or delete your account",
+        "Start a new conversation from the ⋯ menu in a chat, clear conversation data on this device in Settings, or delete your account and saved app preferences in Settings › Account."),
     HelpTopic(AppIcons.People, Mood.LONELY, "Finding human support", "Helplines, counsellors and when to reach\nout",
         "In India, call 112 in an emergency or Tele-MANAS on 14416 for free mental health support, any time. Elsewhere, contact your local emergency number or someone you trust.")
 )
@@ -236,6 +252,11 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(
             "Let It Go does not diagnose, treat or cure any condition. Helpline numbers are for India and are checked before each release.",
+            Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "This developer preview does not yet have a formal Privacy Policy or Terms of Use.",
             Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
         )
     }
