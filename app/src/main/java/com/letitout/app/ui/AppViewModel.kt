@@ -6,6 +6,7 @@ import com.letitout.app.auth.AuthManager
 import com.letitout.app.data.AppSettings
 import com.letitout.app.data.ChatMessage
 import com.letitout.app.data.ChatRepository
+import com.letitout.app.data.CompanionChoice
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +38,7 @@ class AppViewModel @Inject constructor(
         val guest: Boolean = false,
         val userName: String? = null,
         val userEmail: String? = null,
+        val companion: CompanionChoice = CompanionChoice(),
         val settings: AppSettings = AppSettings()
     ) {
         val supportMode: Boolean get() = messages.any { it.supportResources }
@@ -51,6 +53,9 @@ class AppViewModel @Inject constructor(
         refreshAuth()
         viewModelScope.launch {
             preferences.mood.collect { mood -> _state.update { it.copy(mood = mood) } }
+        }
+        viewModelScope.launch {
+            preferences.companion.collect { companion -> _state.update { it.copy(companion = companion) } }
         }
         viewModelScope.launch {
             preferences.settings.collect { settings -> _state.update { it.copy(settings = settings) } }
@@ -68,6 +73,12 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.setMood(mood) }
         replyJob?.cancel()
         _state.update { it.copy(mood = mood, intensity = intensity, messages = emptyList(), loading = false, error = null) }
+    }
+
+    fun chooseCompanion(gender: String, age: String) {
+        if (gender !in CompanionChoice.genders || age !in CompanionChoice.ages) return
+        _state.update { it.copy(companion = CompanionChoice(gender, age)) }
+        viewModelScope.launch { preferences.setCompanion(gender, age) }
     }
 
     fun newConversation() {

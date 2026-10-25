@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -63,17 +64,32 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 @Composable
-internal fun SplashScreen(onContinue: () -> Unit) {
+internal fun SplashScreen(companionGender: String, companionAge: String, onContinue: () -> Unit) {
     val latestOnContinue by rememberUpdatedState(onContinue)
-    LaunchedEffect(Unit) { delay(1400); latestOnContinue() }
-    Box(Modifier.fillMaxSize().background(AppColors.Background).clickable(onClickLabel = "Continue", onClick = onContinue)) {
+    var continued by remember { mutableStateOf(false) }
+    val continueOnce: () -> Unit = {
+        if (!continued) {
+            continued = true
+            latestOnContinue()
+        }
+    }
+    LaunchedEffect(Unit) { delay(1400); continueOnce() }
+    Box(Modifier.fillMaxSize().background(AppColors.Background).clickable(onClickLabel = "Continue", onClick = continueOnce)) {
         Blob(342.dp, AppColors.Lavender, Modifier.align(Alignment.TopStart).offset((-94).dp, (-114).dp).alpha(.9f))
         Blob(365.dp, AppColors.Mint, Modifier.align(Alignment.BottomEnd).offset(105.dp, 153.dp).alpha(.9f))
         Blob(164.dp, AppColors.Peach, Modifier.align(Alignment.TopEnd).offset(89.dp, 310.dp).alpha(.8f))
-        Column(Modifier.align(Alignment.Center).offset(y = (-5).dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(35.dp)) {
-            BrandMark(size = 112.dp, corner = 30.dp, glyph = 62.dp)
+        Column(Modifier.align(Alignment.Center).offset(y = (-5).dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(27.dp)) {
+            Box(Modifier.size(184.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(174.dp).background(AppColors.Lavender, CircleShape))
+                CompanionPortrait(
+                    companionGender, companionAge, "calm",
+                    modifier = Modifier.size(152.dp).clip(CircleShape),
+                    contentDescription = "AI companion portrait"
+                )
+                BrandMark(Modifier.align(Alignment.BottomEnd), size = 52.dp, corner = 16.dp, glyph = 29.dp)
+            }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("LET IT OUT", style = DisplayStyle, fontSize = 39.sp, lineHeight = 44.sp, letterSpacing = 6.sp)
+                Text("LET IT GO", style = DisplayStyle, fontSize = 39.sp, lineHeight = 44.sp, letterSpacing = 6.sp)
                 Text("Your Feelings Matter.", color = AppColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -90,7 +106,8 @@ private class OnboardingPage(val title: String, val body: String)
 private val onboardingPages = listOf(
     OnboardingPage("A Space to Express Yourself", "Talk about whatever is on your mind."),
     OnboardingPage("Name How You Feel", "Pick a mood, or just start talking. No label needed."),
-    OnboardingPage("Speak or Type", "Say it out loud or write it down, at your own pace.")
+    OnboardingPage("Speak or Type", "Say it out loud or write it down, at your own pace."),
+    OnboardingPage("Meet Your Companion", "Choose an adult portrait you feel comfortable talking to. You can change it anytime.")
 )
 
 @Composable
@@ -137,11 +154,23 @@ private fun OnboardingArt(page: Int) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ArtMoodTile(left); ArtMoodTile(right) }
             }
         }
-        else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        2 -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(Modifier.size(120.dp).softShadow(AppColors.Primary, CircleShape, 10.dp).background(AppColors.Surface, CircleShape), contentAlignment = Alignment.Center) {
                 Icon(AppIcons.Mic, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(52.dp))
             }
             ArtBubble("Speak or type — whatever feels easier.", fromUser = false)
+        }
+        else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf("woman" to "young", "woman" to "adult", "man" to "mature").forEachIndexed { index, (gender, age) ->
+                Box(
+                    Modifier.size(if (index == 1) 100.dp else 84.dp)
+                        .softShadow(AppColors.Primary, CircleShape, 5.dp)
+                        .background(AppColors.Surface, CircleShape)
+                        .padding(4.dp).clip(CircleShape)
+                ) {
+                    CompanionPortrait(gender, age, "calm", Modifier.fillMaxSize())
+                }
+            }
         }
     }
 }
@@ -246,7 +275,7 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(AppIcons.ShieldCheck, contentDescription = null, tint = AppColors.Green, modifier = Modifier.size(24.dp))
-            Text("We never see your Google password. Sign-in\nonly shares your name and email with\nLet It Out.", fontSize = 13.sp, lineHeight = 18.sp)
+            Text("We never see your Google password. Sign-in\nonly shares your name and email with\nLet It Go.", fontSize = 13.sp, lineHeight = 18.sp)
         }
         Spacer(Modifier.height(16.dp))
         val linkStyle = TextLinkStyles(SpanStyle(color = AppColors.Primary, fontWeight = FontWeight.Bold))
@@ -256,7 +285,7 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
                 withLink(LinkAnnotation.Clickable("terms", linkStyle) { onPrivacy() }) { append("Terms") }
                 append(" and ")
                 withLink(LinkAnnotation.Clickable("privacy", linkStyle) { onPrivacy() }) { append("Privacy Policy") }
-                append(". Let It Out is for adults 18 and older.")
+                append(". Let It Go is for adults 18 and older.")
             },
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center
         )

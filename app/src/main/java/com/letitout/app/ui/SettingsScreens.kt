@@ -105,7 +105,7 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            LinkButton("About Let It Out", AppColors.Primary, onPrivacy)
+            LinkButton("About Let It Go", AppColors.Primary, onPrivacy)
             Text("Version ${BuildConfig.VERSION_NAME}", Modifier.padding(end = 6.dp), color = AppColors.Muted, fontSize = 13.sp)
         }
     }
@@ -195,7 +195,7 @@ private class HelpTopic(val icon: ImageVector, val mood: Mood, val title: String
 
 private val helpTopics = listOf(
     HelpTopic(AppIcons.Chat, Mood.TALK, "Not a therapist", "An AI companion, not medical care or\ndiagnosis",
-        "Let It Out is an AI listening companion. It can't diagnose or treat anything, and it isn't a therapist, doctor or emergency service."),
+        "Let It Go is an AI listening companion. It can't diagnose or treat anything, and it isn't a therapist, doctor or emergency service."),
     HelpTopic(AppIcons.Sync, Mood.SAD, "How your messages are processed", "Sent to our server and an AI provider to\nreply",
         "Your messages are sent to our server and an AI provider so a reply can be written. Don't share anything you aren't comfortable sending to those services."),
     HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Mood, settings on your device — not\nconversations",
@@ -218,7 +218,7 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
                 Icon(AppIcons.Phone, contentDescription = null, tint = AppColors.Green, modifier = Modifier.size(24.dp))
                 Text("Need a real person right now?", style = DisplayStyle, fontSize = 18.sp, lineHeight = 24.sp, modifier = Modifier.semantics { heading() })
             }
-            Text("Let It Out is an AI and can't help in an emergency. These lines are answered by people.", fontSize = 13.sp, lineHeight = 19.sp)
+            Text("Let It Go is an AI and can't help in an emergency. These lines are answered by people.", fontSize = 13.sp, lineHeight = 19.sp)
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 HelplineButton("Tele-MANAS 14416", "Mental health · free · 24/7", filled = true, Modifier.weight(1f)) { dialNumber(context, "14416") }
                 HelplineButton("Emergency 112", "Immediate danger", filled = false, Modifier.weight(1f)) { dialNumber(context, "112") }
@@ -235,7 +235,7 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(16.dp))
         Text(
-            "Let It Out does not diagnose, treat or cure any condition. Helpline numbers are for India and are checked before each release.",
+            "Let It Go does not diagnose, treat or cure any condition. Helpline numbers are for India and are checked before each release.",
             Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
         )
     }

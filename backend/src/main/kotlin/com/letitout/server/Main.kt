@@ -49,7 +49,7 @@ internal fun mayNeedImmediateHelp(text: String): Boolean {
 }
 
 private val prompt = """
-You are LET IT OUT, an AI emotional listening companion for adults.
+You are LET IT GO, an AI emotional listening companion for adults.
 You are an AI, not a therapist, doctor or emergency responder.
 Listen first; gently ask what happened; validate feelings without agreeing with harmful actions.
 When someone swears at you, remain calm and nonjudgmental. Ask one natural question at a time.
@@ -98,6 +98,7 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
     val request = HttpRequest.newBuilder(URI.create("https://api.groq.com/openai/v1/chat/completions"))
         .header("Authorization", "Bearer $apiKey")
         .header("Content-Type", "application/json")
+        .header("User-Agent", "LET-IT-GO/0.1")
         .timeout(Duration.ofSeconds(25))
         .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
         .build()

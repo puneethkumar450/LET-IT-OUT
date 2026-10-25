@@ -25,6 +25,7 @@ import com.letitout.app.ui.AppColors
 import com.letitout.app.ui.AppTypography
 import com.letitout.app.ui.AppViewModel
 import com.letitout.app.ui.ChatScreen
+import com.letitout.app.ui.CompanionPickerScreen
 import com.letitout.app.ui.HomeScreen
 import com.letitout.app.ui.MoodCheckInScreen
 import com.letitout.app.ui.OnboardingScreen
@@ -80,16 +81,28 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
     // After sign-in, return to where it was opened from (Settings, a chat), or start at Home.
     val finishSignIn: () -> Unit = {
         val previous = backStack.getOrNull(backStack.size - 2)
-        if (previous == null || previous == "onboarding") resetTo("home") else navigateBack()
+        if (previous == null || previous == "onboarding" || previous == "companion") resetTo("home") else navigateBack()
     }
     BackHandler(enabled = backStack.size > 1, onBack = navigateBack)
     MaterialTheme(colorScheme = appColorScheme, typography = AppTypography) {
         Surface(color = AppColors.Background, modifier = Modifier.fillMaxSize()) {
             when (page) {
-                "splash" -> SplashScreen { resetTo(if (state.signedIn || state.settings.onboarded) "home" else "onboarding") }
+                "splash" -> SplashScreen(state.companion.gender, state.companion.age) {
+                    resetTo(if (state.signedIn || state.settings.onboarded) "home" else "onboarding")
+                }
                 "onboarding" -> OnboardingScreen(
                     onSkip = { vm.finishOnboarding(); resetTo("home") },
-                    onGetStarted = { vm.finishOnboarding(); navigateTo("signin") }
+                    onGetStarted = { navigateTo("companion") }
+                )
+                "companion" -> CompanionPickerScreen(
+                    selectedGender = state.companion.gender,
+                    selectedAge = state.companion.age,
+                    onSelect = { gender, age ->
+                        vm.chooseCompanion(gender, age)
+                        vm.finishOnboarding()
+                        navigateTo("signin")
+                    },
+                    onBack = navigateBack
                 )
                 "signin" -> SignInScreen(vm, onSignedIn = finishSignIn, onPreview = finishSignIn, onPrivacy = { navigateTo("privacy") })
                 "home" -> HomeScreen(

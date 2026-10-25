@@ -24,13 +24,18 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -63,7 +68,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
@@ -72,6 +79,7 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
@@ -87,6 +95,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.data.ChatMessage
+import com.letitout.app.data.CompanionChoice
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPalette
 import com.letitout.app.data.palette
@@ -124,6 +133,14 @@ internal fun ChatScreen(
         onDispose { tts.stop(); tts.shutdown() }
     }
     val stopSpeaking: () -> Unit = { tts.stop(); speakingId = null }
+    val speakMessage: (ChatMessage) -> Unit = { message ->
+        if (speechEnabled) {
+            tts.language = Locale.getDefault()
+            tts.speak(message.text, TextToSpeech.QUEUE_FLUSH, null, message.id.toString())
+        } else {
+            speechError = "Read aloud is unavailable on this device."
+        }
+    }
     val recognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
     }
@@ -182,83 +199,162 @@ internal fun ChatScreen(
     }
     val itemCount = 2 + state.messages.size + (if (state.loading) 1 else 0) + (if (state.error != null) 1 else 0)
     LaunchedEffect(itemCount) { listState.animateScrollToItem(itemCount - 1) }
-    BackHandler(onBack = onHome)
+    var pickerOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = !pickerOpen, onBack = onHome)
 
     val supportMode = state.supportMode
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
-    Column(Modifier.fillMaxSize().background(palette.surface).statusBarsPadding().navigationBarsPadding().imePadding()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
-        ) {
-            SquareIconButton(AppIcons.Back, "Back to home", onHome, shadowColor = palette.accent)
-            if (supportMode) {
-                ChipButton("Get human support", onHumanSupport, container = AppColors.Surface, content = AppColors.Primary, icon = AppIcons.Shield)
-                LinkButton("Leave", AppColors.Muted, onHome)
-            } else {
-                ChipButton(state.mood.label, onChangeMood, container = palette.bubble, content = AppColors.Ink, icon = state.mood.icon, iconTint = palette.accent)
-                Box {
-                    SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
-                        DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation() })
-                        DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation(); onHome() })
+    val companion = state.companion
+    val expression = if (supportMode) "calm" else state.mood.companionExpression()
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    BoxWithConstraints(Modifier.fillMaxSize().background(palette.surface)) {
+        val compactHeader = keyboardVisible || maxHeight < 700.dp
+        if (pickerOpen) {
+            CompanionPickerScreen(
+                selectedGender = companion.gender,
+                selectedAge = companion.age,
+                onSelect = { gender, age -> vm.chooseCompanion(gender, age); pickerOpen = false },
+                onBack = { pickerOpen = false }
+            )
+        } else Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+            Column(
+                Modifier.fillMaxWidth().background(
+                    Brush.verticalGradient(listOf(palette.tile, palette.surface))
+                ).statusBarsPadding().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = if (compactHeader) 10.dp else 17.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SquareIconButton(AppIcons.Back, "Back to home", onHome, shadowColor = palette.accent)
+                    Spacer(Modifier.weight(1f))
+                    ChipButton("Human support", onHumanSupport, container = AppColors.Surface, content = AppColors.Ink, icon = AppIcons.Shield)
+                    Spacer(Modifier.size(8.dp))
+                    Box {
+                        SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
+                            if (!supportMode) DropdownMenuItem(text = { Text("Change mood") }, onClick = { menuOpen = false; onChangeMood() })
+                            DropdownMenuItem(text = { Text("Change companion") }, onClick = { menuOpen = false; pickerOpen = true })
+                            DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation() })
+                            DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopSpeaking(); vm.newConversation(); onHome() })
+                        }
+                    }
+                }
+                if (compactHeader) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CompanionPortrait(
+                            companion.gender, companion.age, expression,
+                            modifier = Modifier.size(52.dp).clip(CircleShape),
+                            contentDescription = "${companion.age} ${companion.gender} companion"
+                        )
+                        Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 22.sp)
+                        SmallPillButton("Change", { pickerOpen = true }, AppColors.Surface, palette.accent)
+                    }
+                } else {
+                    Box(
+                        Modifier.padding(top = 3.dp).size(158.dp)
+                            .background(palette.bubble, CircleShape)
+                            .padding(10.dp).clip(CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CompanionPortrait(
+                            companion.gender, companion.age, expression,
+                            modifier = Modifier.fillMaxSize(),
+                            contentDescription = "${companion.age} ${companion.gender} companion showing ${expression}"
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 26.sp)
+                        SmallPillButton("Change", { pickerOpen = true }, AppColors.Surface, palette.accent)
+                    }
+                    Row(
+                        Modifier.padding(top = 7.dp).background(palette.bubble, CircleShape)
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        Box(Modifier.size(7.dp).background(palette.accent, CircleShape))
+                        Text(if (supportMode) "Human support options" else "Listening with care", color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-        }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)
-        ) {
-            item {
-                Text(
-                    "Today · Nothing here is saved", Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                    color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
-                )
-            }
-            item { AiBubble(palette.accent) { BubbleText(state.mood.prompt) } }
-            items(state.messages, key = { it.id }) { message ->
-                val speakingFooter: (@Composable () -> Unit)? =
-                    if (speakingId == message.id) { { SpeakingFooter(palette.accent, stopSpeaking) } } else null
-                when {
-                    message.fromUser -> UserBubble(message.text, palette)
-                    message.supportResources -> SupportBubble(message.text, footer = speakingFooter) { dialNumber(context, it) }
-                    else -> AiBubble(palette.accent, footer = speakingFooter) { BubbleText(message.text) }
-                }
-            }
-            if (state.loading) item { AiBubble(palette.accent) { TypingDots(palette.accent) } }
-            state.error?.let { error ->
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, top = 15.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)
+            ) {
                 item {
-                    ErrorBubble(
-                        error, palette, canEdit = state.messages.lastOrNull()?.fromUser == true,
-                        onRetry = vm::retry, onEdit = { vm.editLastMessage()?.let { input = it } }
+                    Text(
+                        "Today · Nothing here is saved", Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                     )
                 }
-            }
-        }
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (!online) StatusPill("No internet connection", AppColors.Warning)
-            speechError?.let { StatusPill(it, AppColors.Danger) }
-            if (!state.signedIn) {
-                Row(
-                    Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Preview mode · sign in to send messages.", Modifier.weight(1f), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
-                    LinkButton("Sign in", AppColors.Primary, onSignIn)
+                item { AiBubble(palette.accent, companion, expression) { BubbleText(state.mood.prompt) } }
+                items(state.messages, key = { it.id }) { message ->
+                    val speakingFooter: (@Composable () -> Unit)? =
+                        if (speakingId == message.id) { { SpeakingFooter(palette.accent, stopSpeaking) } } else null
+                    when {
+                        message.fromUser -> UserBubble(message.text, palette)
+                        message.supportResources -> SupportBubble(message.text, companion, footer = speakingFooter) { dialNumber(context, it) }
+                        else -> AiBubble(
+                            palette.accent, companion, expression,
+                            footer = speakingFooter ?: { ListenFooter(palette.bubble, palette.accent) { speakMessage(message) } }
+                        ) { BubbleText(message.text) }
+                    }
+                }
+                if (state.loading) item { AiBubble(palette.accent, companion, expression) { TypingDots(palette.accent) } }
+                state.error?.let { error ->
+                    item {
+                        ErrorBubble(
+                            error, palette, companion, canEdit = state.messages.lastOrNull()?.fromUser == true,
+                            onRetry = vm::retry, onEdit = { vm.editLastMessage()?.let { input = it } }
+                        )
+                    }
                 }
             }
-            Composer(
-                input = input, onInputChange = { input = it }, palette = palette,
-                placeholder = if (supportMode) "Keep talking, if you'd like…" else "Say what's on your mind…",
-                signedIn = state.signedIn, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
-                onMic = toggleMic, onSend = submitMessage,
-                onDone = { focusManager.clearFocus(); keyboard?.hide() }
-            )
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!online) StatusPill("No internet connection", AppColors.Warning)
+                speechError?.let { StatusPill(it, AppColors.Danger) }
+                if (!state.signedIn) {
+                    Row(
+                        Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Preview mode · sign in to send messages.", Modifier.weight(1f), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp)
+                        LinkButton("Sign in", AppColors.Primary, onSignIn)
+                    }
+                }
+                Composer(
+                    input = input, onInputChange = { input = it }, palette = palette,
+                    placeholder = if (supportMode) "Keep talking, if you'd like…" else "Say what's on your mind…",
+                    signedIn = state.signedIn, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
+                    onMic = toggleMic, onSend = submitMessage,
+                    onDone = { focusManager.clearFocus(); keyboard?.hide() }
+                )
+            }
         }
     }
+}
+
+private fun Mood.companionExpression(): String = when (this) {
+    Mood.ANGRY -> "angry"
+    Mood.SAD -> "sad"
+    Mood.STRESSED -> "stressed"
+    Mood.ANXIOUS -> "anxious"
+    Mood.LONELY -> "lonely"
+    Mood.HAPPY -> "happy"
+    Mood.TALK -> "calm"
 }
 
 @Composable
@@ -295,17 +391,25 @@ private fun UserBubble(text: String, palette: MoodPalette) {
 }
 
 @Composable
-private fun AiAvatar(tint: Color) {
-    Box(Modifier.size(28.dp).background(AppColors.Surface, CircleShape), contentAlignment = Alignment.Center) {
-        Icon(AppIcons.Heart, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-    }
+private fun AiAvatar(companion: CompanionChoice, expression: String) {
+    CompanionPortrait(
+        companion.gender, companion.age, expression,
+        modifier = Modifier.size(46.dp).clip(CircleShape),
+        contentDescription = null
+    )
 }
 
 @Composable
-private fun AiBubble(accent: Color, footer: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun AiBubble(
+    accent: Color,
+    companion: CompanionChoice,
+    expression: String,
+    footer: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val shape = RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(accent)
+        AiAvatar(companion, expression)
         Column(
             Modifier.widthIn(max = 300.dp).softShadow(accent, shape, 2.dp).background(AppColors.Surface, shape).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -337,6 +441,20 @@ private fun SpeakingFooter(accent: Color, onStop: () -> Unit) {
 }
 
 @Composable
+private fun ListenFooter(background: Color, accent: Color, onSpeak: () -> Unit) {
+    Surface(onClick = onSpeak, shape = CircleShape, color = background, contentColor = accent) {
+        Row(
+            Modifier.heightIn(min = 40.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(AppIcons.Speaker, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Text("Listen", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun TypingDots(color: Color) {
     val transition = rememberInfiniteTransition(label = "typing")
     Row(Modifier.padding(vertical = 6.dp).semantics { contentDescription = "Thinking" }, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -359,10 +477,10 @@ private fun Modifier.dashedBorder(color: Color, shape: Shape, width: Dp = 1.5.dp
 }
 
 @Composable
-private fun ErrorBubble(message: String, palette: MoodPalette, canEdit: Boolean, onRetry: () -> Unit, onEdit: () -> Unit) {
+private fun ErrorBubble(message: String, palette: MoodPalette, companion: CompanionChoice, canEdit: Boolean, onRetry: () -> Unit, onEdit: () -> Unit) {
     val shape = RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(palette.accent)
+        AiAvatar(companion, "calm")
         Column(
             Modifier.widthIn(max = 300.dp).background(AppColors.Surface, shape).dashedBorder(palette.accent.copy(alpha = .45f), shape)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -381,10 +499,10 @@ private fun ErrorBubble(message: String, palette: MoodPalette, canEdit: Boolean,
 }
 
 @Composable
-private fun SupportBubble(text: String, footer: (@Composable () -> Unit)?, onDial: (String) -> Unit) {
+private fun SupportBubble(text: String, companion: CompanionChoice, footer: (@Composable () -> Unit)?, onDial: (String) -> Unit) {
     val shape = RoundedCornerShape(24.dp, 24.dp, 24.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(AppColors.Primary)
+        AiAvatar(companion, "calm")
         Column(
             Modifier.weight(1f).softShadow(AppColors.Primary, shape, 4.dp).background(AppColors.Surface, shape).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -395,7 +513,7 @@ private fun SupportBubble(text: String, footer: (@Composable () -> Unit)?, onDia
                 HelplineRow("Emergency · 112", "If you're in immediate danger", filled = false) { onDial("112") }
             }
             Text(
-                "Let It Out can't call anyone or alert a person for you. These numbers go to real people. I'm still here if you want to keep talking.",
+                "Let It Go can't call anyone or alert a person for you. These numbers go to real people. I'm still here if you want to keep talking.",
                 color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp
             )
             footer?.let { HorizontalDivider(color = AppColors.Lavender); it() }

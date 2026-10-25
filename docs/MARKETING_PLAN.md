@@ -1,8 +1,8 @@
 # Launch and acquisition roadmap (not active in v0.1.0)
 
-**Brand:** LET IT OUT — “Talk freely. Feel heard. Find your calm.”
+**Brand:** LET IT GO — “Talk freely. Feel heard. Find your calm.”
 
-**Website:** `letitout.co.in` (proposed, not provisioned). Single-page landing site with Play Store / future App Store badges, screenshots, privacy, terms and delete-account pages.
+**Website:** A single-page preview is deployed through Sites. `let-it-go.in` has been purchased and is being connected; Play Store / future App Store badges and legal pages belong to the release plan. General contact: `contact@let-it-go.in`; product support: `support@let-it-go.in`.
 
 **Channels to test after launch readiness:** Instagram Reels/Stories, Facebook, YouTube Shorts/Google App Campaigns, Snapchat, Moj, Josh; optional TikTok only in markets where available (not for an India-targeted campaign while banned). Social handles and paid accounts are not created by this starter.
 

@@ -136,6 +136,7 @@ object AppIcons {
     val Heart by lazy { solidIcon("M12 21c-7-4.5-10-8.5-10-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 4.5-3 8.5-8 13z") }
     val More by lazy { solidIcon(circle(5f, 12f, 2f), circle(12f, 12f, 2f), circle(19f, 12f, 2f)) }
     val Mic by lazy { lineIcon(rect(9f, 3f, 6f, 11f, 3f), "M5 11a7 7 0 0 0 14 0M12 18v3") }
+    val Speaker by lazy { lineIcon("M4 9v6h4l5 4V5L8 9H4z", "M16 9a4 4 0 0 1 0 6", "M18.5 6.5a8 8 0 0 1 0 11") }
     val Send by lazy { lineIcon("M12 19V5M6 11l6-6 6 6", width = 2.2f) }
     val Stop by lazy { solidIcon(rect(5f, 5f, 14f, 14f, 3f)) }
     val Shield by lazy { lineIcon("M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z") }

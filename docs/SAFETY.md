@@ -1,6 +1,6 @@
 # Safety and responsible emotional support — RELEASE BLOCKER
 
-**LET IT OUT is an AI listening companion for adults (18+), not medical therapy or emergency care.** The prototype's deterministic phrase checks are intentionally incomplete: they can miss self-harm ideation, imminent violence, threats in other languages, or nuanced/delayed risk. They can also over-trigger. **Do not expose the included AI flow to real distressed users as a production mental health service.**
+**LET IT GO is an AI listening companion for adults (18+), not medical therapy or emergency care.** The prototype's deterministic phrase checks are intentionally incomplete: they can miss self-harm ideation, imminent violence, threats in other languages, or nuanced/delayed risk. They can also over-trigger. **Do not expose the included AI flow to real distressed users as a production mental health service.**
 
 Must complete before public release:
 

@@ -1,17 +1,19 @@
-# LET IT OUT
+# LET IT GO
 
 **A mood-aware Android AI listening companion (v0.1.0 developer starter).**
 
 > **Status: developer starter, not a public release.** Android debug/release builds and backend tests pass locally. Guest sign-in and real AI chat replies have worked on an emulator. Voice recognition, physical-device behavior, production infrastructure, and independent safety review still need verification before real users are invited.
 
 **Android application ID:** `com.letitout.app`
-**Display name:** `LET IT OUT`
+**Display name:** `LET IT GO`
 **Intended repository:** https://github.com/puneethkumar450/LET-IT-OUT.git
+
+The app display name and website brand are LET IT GO. The existing Android application ID, Firebase project, backend artifact names, and Git repository URL retain their original identifiers so existing integrations remain connected.
 
 ## What has been implemented in source
 
-- Native Jetpack Compose splash, three-page onboarding, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat view, settings and Privacy & Help screen, with Android Back navigation.
-- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, speech and theme settings persist through DataStore.
+- Native Jetpack Compose splash with companion portrait, four-page onboarding, adult companion portrait picker, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat view, settings and Privacy & Help screen, with Android Back navigation.
+- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, companion portrait, speech and theme settings persist through DataStore.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in, connected to the development Firebase project `let-it-out-d661a` through the ignored `app/google-services.json`.
 - Ktor backend exposing `/health`, `/ready`, and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, and limiting input and traffic. Production mode uses Firestore shared counters and starts with chat disabled.
 - Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
@@ -95,8 +97,9 @@ Response:
 - Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
 - Prototype safety screening uses a few phrases and can miss many crisis situations. Do not release publicly until replaced/reviewed by appropriate experts.
 - Built-in Android TTS voice quality and STT languages vary by device. STT might send audio to the device's selected speech-service provider.
+- Companion portraits are static expression images; lip sync and live facial animation are not implemented.
 - No ad SDK is integrated. Acquisition planning is in `docs/MARKETING_PLAN.md`.
-- Website and iOS app are future milestones.
+- A static website now lives in `web/` as a private landing-page preview; iOS is a future milestone. The website's mood interaction is illustrative and does not connect to AI chat.
 - Production backend packaging and shared limits are prepared, but the clinically reviewed safety routing and privacy review are still outstanding. Production chat remains disabled by default.
 
 ## 6. Next tasks

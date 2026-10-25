@@ -1,4 +1,4 @@
-# LET IT OUT — versioned delivery plan
+# LET IT GO — versioned delivery plan
 
 Legend: ✅ source scaffold exists · 🔧 unverified/in progress · ⬜ not implemented
 
@@ -50,7 +50,8 @@ Legend: ✅ source scaffold exists · 🔧 unverified/in progress · ⬜ not imp
 
 ## v2.1.0 — iOS and marketing
 
-- ⬜ iOS app, App Store links; single-page `letitout.co.in`
+- ⬜ iOS app, App Store links; LET IT GO custom domain
+- ✅ Single-page website preview in `web/` (not an app launch or custom-domain deployment)
 - ⬜ Instagram/Facebook, YouTube/Google, region-appropriate social ad creative
 - ⬜ Ad attribution without sensitive mood or chat data
 - ⬜ Monetization only after considering well-being and data privacy impacts
