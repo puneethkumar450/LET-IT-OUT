@@ -4,7 +4,7 @@ This opt-in pilot animates **only the woman/adult companion** during AI replies.
 
 ## Set up the avatar
 
-1. Create a custom Simli avatar using the neutral, upper-left portrait in [`companion_woman_adult.png`](../app/src/main/res/drawable-nodpi/companion_woman_adult.png). Simli needs a single portrait, not the entire 3 × 3 expression sheet. See [Simli's avatar guide](https://docs.simli.com/api-reference/create-avatar).
+1. Create a custom Simli avatar using the ready-to-upload [woman/adult neutral portrait](avatars/woman-adult-live-source.png), prepared from the app's expression sheet. Simli needs a single portrait, not the entire 3 × 3 sheet. See [Simli's avatar guide](https://docs.simli.com/api-reference/create-avatar). A Simli plan with custom avatar generation is required.
 2. Put the resulting face ID and API key in the ignored `backend/.env` file:
 
    ```text
