@@ -91,7 +91,7 @@ Response:
 
 ## 5. Existing limitations
 
-- Local verification on 25 October 2026: debug and release APK builds passed; three Android chat HTTP contract tests, two emulator tests (preference persistence/reset and accessible companion selection), and backend route tests passed. The backend answered `/health` and `/ready` locally and rejected an unauthenticated chat request. This does not verify production hosting or safety.
+- Local verification on 25 October 2026: debug and release APK builds passed; three Android chat HTTP contract tests, four emulator tests (preference persistence/reset, accessible companion selection, and ViewModel cancellation/retry behavior), and backend route tests passed. The backend answered `/health` and `/ready` locally and rejected an unauthenticated chat request. This does not verify production hosting or safety.
 - The debug build, anonymous guest sign-in, guest-to-Google linking, and real AI replies were verified on an emulator. Fresh Google sign-in, voice recognition, and physical-device behavior remain unverified.
 - After confirmed Firebase account deletion, the app clears in-memory conversation data and all local preferences. Deletion may still require recent Firebase reauthentication. For a production service, implement a complete user-data erasure policy wherever data is retained.
 - Guest-to-Google account upgrade is implemented using Firebase credential linking; it needs collision-handling tests.

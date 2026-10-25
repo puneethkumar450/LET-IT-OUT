@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 @HiltViewModel
@@ -51,6 +52,8 @@ class AppViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var nextId = 1L
     private var replyJob: Job? = null
+    /** Invalidates callbacks from a request after a conversation reset or a newer request. */
+    private val replyGeneration = AtomicLong(0L)
 
     init {
         refreshAuth()
@@ -74,7 +77,7 @@ class AppViewModel @Inject constructor(
 
     fun chooseMood(mood: Mood, intensity: Int? = null) {
         viewModelScope.launch { preferences.setMood(mood) }
-        replyJob?.cancel()
+        cancelReply()
         _state.update { it.copy(mood = mood, intensity = intensity, messages = emptyList(), loading = false, error = null) }
     }
 
@@ -85,7 +88,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun newConversation() {
-        replyJob?.cancel()
+        cancelReply()
         _state.update { it.copy(messages = emptyList(), loading = false, error = null) }
     }
 
@@ -98,7 +101,9 @@ class AppViewModel @Inject constructor(
 
     /** Called only after Firebase confirms deletion; waits for local data to be removed. */
     suspend fun clearAllLocalData() = withContext(NonCancellable) {
+        replyGeneration.incrementAndGet()
         replyJob?.cancelAndJoin()
+        replyJob = null
         preferences.clearAll()
         _state.update {
             it.copy(
@@ -134,20 +139,33 @@ class AppViewModel @Inject constructor(
     }
 
     private fun requestReply() {
+        val generation = replyGeneration.incrementAndGet()
         _state.update { it.copy(loading = true, error = null) }
         replyJob = viewModelScope.launch {
             try {
                 val current = _state.value
                 val response = repository.reply(current.mood, current.messages, current.intensity)
-                val reply = ChatMessage(nextId++, response.reply, false, supportResources = response.safetyState != "NORMAL")
-                _state.update { it.copy(messages = it.messages + reply, loading = false) }
+                if (generation == replyGeneration.get()) {
+                    val reply = ChatMessage(nextId++, response.reply, false, supportResources = response.safetyState != "NORMAL")
+                    _state.update {
+                        if (generation == replyGeneration.get()) it.copy(messages = it.messages + reply, loading = false) else it
+                    }
+                }
             } catch (cancel: CancellationException) {
-                _state.update { it.copy(loading = false) }
+                _state.update { if (generation == replyGeneration.get()) it.copy(loading = false) else it }
                 throw cancel
             } catch (t: Exception) {
-                _state.update { it.copy(loading = false, error = friendlyError(t)) }
+                _state.update {
+                    if (generation == replyGeneration.get()) it.copy(loading = false, error = friendlyError(t)) else it
+                }
             }
         }
+    }
+
+    private fun cancelReply() {
+        replyGeneration.incrementAndGet()
+        replyJob?.cancel()
+        replyJob = null
     }
 
     private fun friendlyError(t: Exception): String = when {
