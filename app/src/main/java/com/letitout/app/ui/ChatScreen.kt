@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.letitout.app.data.TEST_BUILD_NOTICE
 import com.letitout.app.data.ChatMessage
 import com.letitout.app.data.COMPANION_NAME
 import com.letitout.app.data.Mood
@@ -488,10 +489,16 @@ internal fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)
             ) {
                 item {
-                    Text(
-                        "Today · Chat isn't saved on this device", Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                        color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
-                    )
+                    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Today · Chat isn't saved on this device", Modifier.fillMaxWidth(),
+                            color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                        )
+                        Text(
+                            TEST_BUILD_NOTICE, Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            color = AppColors.Muted, fontSize = 12.sp, lineHeight = 17.sp, textAlign = TextAlign.Center
+                        )
+                    }
                 }
                 item { AiBubble(palette.accent) { BubbleText(state.mood.prompt) } }
                 items(state.messages, key = { it.id }) { message ->

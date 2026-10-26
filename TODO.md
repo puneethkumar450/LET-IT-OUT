@@ -7,7 +7,7 @@ Goal: a Play Store closed test that strangers can join from a public post.
   - [x] Wider phrase fallback (incl. common Hindi phrases) in case the classifier is unavailable
   - [x] System prompt asks Ari to check on safety gently when it notices distress
   - [x] Tests, plus a live spot check: 13/13 sample messages classified correctly
-- [ ] 2. "Test version" notice in the app
+- [x] 2. "Test version" notice in the app (Home + top of every chat; text in `TEST_BUILD_NOTICE`, remove before public release)
   - "This is a test version of an AI companion. It's not a substitute for professional help. If you're in crisis, call 14416 or 112."
 - [ ] 3. Put the backend online (Cloud Run free tier, ₹0–100 budget alert) — needs your Google Cloud account
 - [ ] 4. Privacy policy page on let-it-go.in (Play requires a public URL)

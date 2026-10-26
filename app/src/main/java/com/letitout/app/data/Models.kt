@@ -4,6 +4,9 @@ import androidx.compose.ui.graphics.Color
 
 const val COMPANION_NAME = "Ari"
 
+/** Shown on Home and at the top of chat during the closed test; remove for the public release. */
+const val TEST_BUILD_NOTICE = "This is a test version of an AI companion. It's not a substitute for professional help. If you're in crisis, call 14416 or 112."
+
 enum class Mood(val label: String, val prompt: String, val heading: String, val reassurance: String) {
     ANGRY("Angry", "What happened today? I'm listening.", "Feeling angry", "It's okay to feel this way. You can say it however it comes out — no judgment here."),
     SAD("Sad", "I'm here. Whenever you're ready, what's been on your mind?", "Feeling sad", "You don't have to explain it perfectly. Take all the time you need."),

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.letitout.app.R
+import com.letitout.app.data.TEST_BUILD_NOTICE
 
 /** The single post-setup starting point. The live connection opens only after Start talking. */
 @Composable
@@ -108,8 +109,8 @@ internal fun HomeScreen(
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "An AI companion for adults 18+.",
-                color = Color.White.copy(alpha = .67f), fontSize = 12.sp, lineHeight = 16.sp
+                "$TEST_BUILD_NOTICE For adults 18+.",
+                color = Color.White.copy(alpha = .8f), fontSize = 12.sp, lineHeight = 17.sp
             )
         }
     }
