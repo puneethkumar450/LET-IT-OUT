@@ -45,11 +45,14 @@ The JavaScript bridge source is in `avatar-bridge/`; its checked-in bundle is in
 - The current Android TTS engine must provide PCM16 synthesis callbacks for lip sync. Other formats fall back to regular device voice.
 - Spoken AI reply audio goes to Simli while live mode is open. App chat text is still handled by the existing chat backend.
 
-## Website hello
+## Website hello video
 
-The Ari page on let-it-go.in can play a one-minute live hello: a recorded greeting (`web/dist/characters/ari-greeting.pcm`) lip-synced by Simli. Visitors do not speak or type, and no AI chat runs.
+The Ari page on let-it-go.in plays `web/dist/characters/ari-hello.mp4`: Ari's recorded greeting, lip-synced once by Simli and saved as a video. Visitors only stream a static file, so the website needs no backend, token, or Simli session.
 
-- `POST /v1/avatar/web-session` needs no sign-in. It only answers origins listed in `WEB_AVATAR_ORIGINS`, allows two sessions per visitor address and `WEB_AVATAR_GLOBAL_HOURLY_LIMIT` (default 30) overall per hour, and requests a 60-second Simli session with 15 seconds of idle time.
-- To turn it on after the backend is deployed, set `WEB_AVATAR_ORIGINS=https://let-it-go.in,https://www.let-it-go.in` on the server and put the backend URL in the `ari-live-api` meta tag in `web/dist/characters/index.html`. With the tag empty, the button stays hidden.
-- `web/scripts/make-greeting.sh` rebuilds the greeting from `web/scripts/ari-greeting.txt` with the macOS Samantha voice, or from a recording passed as its argument. The macOS voice is a placeholder: Apple's licence does not cover commercial use, so replace it with a recording or a commercially licensed voice before turning the hello on.
-- The web client is `avatar-bridge/src/web.js`; rebuild it with `cd avatar-bridge && npm run build:web`.
+To re-record it after changing the voice or script:
+
+1. Put the new voice in place with `web/scripts/make-greeting.sh path/to/recording.wav`.
+2. Run `python3 web/scripts/record-hello.py` and open `http://localhost:4174/` in Chrome. It reads the Simli key and face from `backend/.env`, mints one 60-second session, and records Ari while she speaks.
+3. Click **Record hello**. When Ari finishes, the page uploads the recording and the script writes the MP4 with ffmpeg.
+
+The recorder's Simli client is `avatar-bridge/src/web.js`; rebuild it with `cd avatar-bridge && npm run build:web`.

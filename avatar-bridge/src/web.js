@@ -1,6 +1,6 @@
 import { SimliClient, LogLevel } from "simli-client";
 
-// Plays Ari's recorded website greeting through one short Simli session.
+// Plays Ari's recorded greeting through one short Simli session, so the recorder can capture it as video.
 window.AriLive = {
   async start({ sessionToken, video, audio, greeting, onLive, onEnd }) {
     const client = new SimliClient(sessionToken, video, audio, null, LogLevel.ERROR, "livekit");
