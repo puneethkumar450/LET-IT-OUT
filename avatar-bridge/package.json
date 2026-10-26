@@ -1,7 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "build": "esbuild src/bridge.js --bundle --minify --format=iife --target=es2020 --outfile=../app/src/main/assets/live-avatar/bridge.js"
+    "build": "esbuild src/bridge.js --bundle --minify --format=iife --target=es2020 --outfile=../app/src/main/assets/live-avatar/bridge.js",
+    "build:web": "esbuild src/web.js --bundle --minify --format=iife --target=es2020 --outfile=../web/dist/characters/ari-live.js"
   },
   "dependencies": {
     "simli-client": "3.1.0"

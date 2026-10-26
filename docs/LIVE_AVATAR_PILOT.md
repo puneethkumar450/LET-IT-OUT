@@ -44,3 +44,12 @@ The JavaScript bridge source is in `avatar-bridge/`; its checked-in bundle is in
 - The Android WebView needs a working WebRTC-capable network. A failed connection leaves chat usable with the portrait.
 - The current Android TTS engine must provide PCM16 synthesis callbacks for lip sync. Other formats fall back to regular device voice.
 - Spoken AI reply audio goes to Simli while live mode is open. App chat text is still handled by the existing chat backend.
+
+## Website hello
+
+The Ari page on let-it-go.in can play a one-minute live hello: a recorded greeting (`web/dist/characters/ari-greeting.pcm`) lip-synced by Simli. Visitors do not speak or type, and no AI chat runs.
+
+- `POST /v1/avatar/web-session` needs no sign-in. It only answers origins listed in `WEB_AVATAR_ORIGINS`, allows two sessions per visitor address and `WEB_AVATAR_GLOBAL_HOURLY_LIMIT` (default 30) overall per hour, and requests a 60-second Simli session with 15 seconds of idle time.
+- To turn it on after the backend is deployed, set `WEB_AVATAR_ORIGINS=https://let-it-go.in,https://www.let-it-go.in` on the server and put the backend URL in the `ari-live-api` meta tag in `web/dist/characters/index.html`. With the tag empty, the button stays hidden.
+- `web/scripts/make-greeting.sh` rebuilds the greeting from `web/scripts/ari-greeting.txt` with the macOS Samantha voice, or from a recording passed as its argument. The macOS voice is a placeholder: Apple's licence does not cover commercial use, so replace it with a recording or a commercially licensed voice before turning the hello on.
+- The web client is `avatar-bridge/src/web.js`; rebuild it with `cd avatar-bridge && npm run build:web`.

@@ -13,7 +13,10 @@ internal data class ServerConfig(
     val perUserHourlyLimit: Int,
     val globalHourlyLimit: Int,
     /** Groq-hosted safety classifier; null when GROQ_SAFETY_MODEL=off. */
-    val groqSafetyModel: String? = DEFAULT_SAFETY_MODEL
+    val groqSafetyModel: String? = DEFAULT_SAFETY_MODEL,
+    /** Website origins allowed to start the one-minute Ari greeting; empty turns the web preview off. */
+    val webAvatarOrigins: Set<String> = emptySet(),
+    val webAvatarGlobalHourlyLimit: Int = 30
 ) {
     companion object {
         const val DEFAULT_SAFETY_MODEL = "openai/gpt-oss-20b"
@@ -46,12 +49,16 @@ internal data class ServerConfig(
                 .mapNotNull { mood ->
                     env["SIMLI_BACKGROUND_ID_$mood"]?.trim()?.takeIf { it.isNotEmpty() }?.let { mood to it }
                 }.toMap()
+            // Production must opt in explicitly; local development allows the static site preview server.
+            val webAvatarOrigins = (env["WEB_AVATAR_ORIGINS"] ?: if (production) "" else "http://localhost:4173")
+                .split(',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.toSet()
+            val webAvatarGlobalLimit = integer("WEB_AVATAR_GLOBAL_HOURLY_LIMIT", 30)
             if (production) {
                 require(projectId != null) { "FIREBASE_PROJECT_ID is required in production" }
                 if (chatEnabled) require(apiKey != null) { "GROQ_API_KEY is required when production chat is enabled" }
             }
             return ServerConfig(production, chatEnabled, projectId, apiKey, model, simliApiKey, simliFaceId, simliBackgroundIds, port, perUserLimit, globalLimit,
-                safetyModel.takeUnless { it.equals("off", ignoreCase = true) })
+                safetyModel.takeUnless { it.equals("off", ignoreCase = true) }, webAvatarOrigins, webAvatarGlobalLimit)
         }
     }
 }
