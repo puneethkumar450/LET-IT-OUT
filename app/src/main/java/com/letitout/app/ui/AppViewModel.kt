@@ -6,7 +6,6 @@ import com.letitout.app.auth.AuthManager
 import com.letitout.app.data.AppSettings
 import com.letitout.app.data.ChatMessage
 import com.letitout.app.data.ChatRepository
-import com.letitout.app.data.CompanionChoice
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +22,7 @@ import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
+import android.os.SystemClock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -42,7 +42,6 @@ class AppViewModel @Inject constructor(
         val guest: Boolean = false,
         val userName: String? = null,
         val userEmail: String? = null,
-        val companion: CompanionChoice = CompanionChoice(),
         val settings: AppSettings = AppSettings()
     ) {
         val supportMode: Boolean get() = messages.any { it.supportResources }
@@ -52,6 +51,8 @@ class AppViewModel @Inject constructor(
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var nextId = 1L
     private var replyJob: Job? = null
+    private var warmupJob: Job? = null
+    private var lastWarmupAt = 0L
     /** Invalidates callbacks from a request after a conversation reset or a newer request. */
     private val replyGeneration = AtomicLong(0L)
 
@@ -59,9 +60,6 @@ class AppViewModel @Inject constructor(
         refreshAuth()
         viewModelScope.launch {
             preferences.mood.collect { mood -> _state.update { it.copy(mood = mood) } }
-        }
-        viewModelScope.launch {
-            preferences.companion.collect { companion -> _state.update { it.copy(companion = companion) } }
         }
         viewModelScope.launch {
             preferences.settings.collect { settings -> _state.update { it.copy(settings = settings) } }
@@ -79,12 +77,6 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { preferences.setMood(mood) }
         cancelReply()
         _state.update { it.copy(mood = mood, intensity = intensity, messages = emptyList(), loading = false, error = null) }
-    }
-
-    fun chooseCompanion(gender: String, age: String) {
-        if (gender !in CompanionChoice.genders || age !in CompanionChoice.ages) return
-        _state.update { it.copy(companion = CompanionChoice(gender, age)) }
-        viewModelScope.launch { preferences.setCompanion(gender, age) }
     }
 
     fun newConversation() {
@@ -108,13 +100,24 @@ class AppViewModel @Inject constructor(
         _state.update {
             it.copy(
                 mood = Mood.TALK, intensity = null, messages = emptyList(), loading = false,
-                error = null, companion = CompanionChoice(), settings = AppSettings()
+                error = null, settings = AppSettings()
             )
         }
     }
 
     fun setReadAloud(enabled: Boolean) { viewModelScope.launch { preferences.setReadAloud(enabled) } }
-    suspend fun avatarSessionToken(): String = repository.avatarSessionToken()
+    fun prewarmAri() {
+        if (!_state.value.signedIn || warmupJob?.isActive == true) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastWarmupAt < 120_000L) return
+        lastWarmupAt = now
+        warmupJob = viewModelScope.launch {
+            try { repository.prewarm() }
+            catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { /* Start talking still performs the normal connection and error flow. */ }
+        }
+    }
+    suspend fun avatarSessionToken(mood: Mood): String = repository.avatarSessionToken(mood)
     fun setVoiceInput(enabled: Boolean) { viewModelScope.launch { preferences.setVoiceInput(enabled) } }
     fun setFollowMoodTheme(enabled: Boolean) { viewModelScope.launch { preferences.setFollowMoodTheme(enabled) } }
     fun finishOnboarding() { viewModelScope.launch { preferences.setOnboarded() } }

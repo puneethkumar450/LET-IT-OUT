@@ -12,13 +12,13 @@ The app display name and website brand are LET IT GO. The existing Android appli
 
 ## What has been implemented in source
 
-- Native Jetpack Compose splash with companion portrait, four-page onboarding, adult companion portrait picker, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat view, settings and Privacy & Help screen, with Android Back navigation.
-- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, companion portrait, speech and theme settings persist through DataStore.
+- Native Jetpack Compose splash, four-page onboarding, Ari setup, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat summary, talking avatar pilot, settings and Privacy & Help screen, with Android Back navigation.
+- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, speech and theme settings persist through DataStore. A single generated Ari portrait is shared across the static companion views.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in, connected to the development Firebase project `let-it-out-d661a` through the ignored `app/google-services.json`.
 - Ktor backend exposing `/health`, `/ready`, and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, and limiting input and traffic. Production mode uses Firestore shared counters and starts with chat disabled.
 - Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
 - An intentionally limited **prototype-only** crisis keyword guard plus configurable support resources. **Not a clinically validated or sufficient production safety system.**
-- No AdMob, analytics trackers, WebRTC, background microphone, or large downloadable AI models.
+- No AdMob, analytics trackers, background microphone, or large downloadable AI models. The debug talking avatar pilot uses WebRTC.
 
 ## 1. Open Android project
 
@@ -100,7 +100,7 @@ Response:
 - Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
 - Prototype safety screening uses a few phrases and can miss many crisis situations. Do not release publicly until replaced/reviewed by appropriate experts.
 - Built-in Android TTS voice quality and STT languages vary by device. STT might send audio to the device's selected speech-service provider.
-- Companion portraits are static expression images; lip sync and live facial animation are not implemented.
+- The debug build includes one Simli talking-avatar pilot. Its live video is provided by Simli and can differ slightly from the generated Ari portrait used on static screens; the pilot is disabled in release builds.
 - No ad SDK is integrated. Acquisition planning is in `docs/MARKETING_PLAN.md`.
 - A static landing page lives in `web/` and is served at `https://let-it-go.in/`; iOS is a future milestone. The website's mood interaction is illustrative and does not connect to AI chat.
 - Production backend packaging and shared limits are prepared, but the clinically reviewed safety routing and privacy review are still outstanding. Production chat remains disabled by default.

@@ -35,7 +35,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "WEB_CLIENT_ID", "\"${project.findProperty("webClientId") ?: ""}\"")
         buildConfigField("String", "API_BASE_URL", "\"${project.findProperty("apiBaseUrl") ?: "http://10.0.2.2:8080/"}\"")
-        buildConfigField("boolean", "LIVE_AVATAR_PILOT", (project.findProperty("liveAvatarPilot") == "true").toString())
+    }
+    buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "LIVE_AVATAR_PILOT", (project.findProperty("liveAvatarPilot") != "false").toString())
+        }
+        getByName("release") {
+            buildConfigField("boolean", "LIVE_AVATAR_PILOT", "false")
+        }
     }
     if (hasReleaseSigning) {
         signingConfigs.create("release") {

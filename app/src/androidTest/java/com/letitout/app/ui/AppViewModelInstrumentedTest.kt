@@ -127,10 +127,15 @@ class AppViewModelInstrumentedTest {
         val requests = CopyOnWriteArrayList<ChatRequest>()
         private val continuations = CopyOnWriteArrayList<Continuation<ChatResponse>>()
 
+        override suspend fun health() = error("Warmup is not used by this chat ViewModel test")
+
         override suspend fun chat(authorization: String, request: ChatRequest): ChatResponse = suspendCoroutine { continuation ->
             requests += request
             continuations += continuation
         }
+
+        override suspend fun avatarSession(authorization: String, mood: String) =
+            error("Live avatar is not used by this chat ViewModel test")
 
         fun reply(index: Int, text: String) = continuations[index].resume(ChatResponse(text))
         fun fail(index: Int, error: Exception) = continuations[index].resumeWithException(error)

@@ -18,14 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +39,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -58,7 +53,7 @@ import com.letitout.app.data.palette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private enum class SettingsDialog { THEME, CLEAR_DATA, DELETE_ACCOUNT }
+private enum class SettingsDialog { CLEAR_DATA, DELETE_ACCOUNT }
 
 @Composable
 internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> Unit, onSignIn: () -> Unit, onSignedOut: () -> Unit) {
@@ -71,10 +66,6 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         PageHeader("Settings", onBack)
         Spacer(Modifier.height(16.dp))
         AccountCard(state, onSignIn)
-        Spacer(Modifier.height(16.dp))
-        SettingsGroup("Appearance") {
-            SettingsRow("App theme", { dialog = SettingsDialog.THEME }, value = if (state.settings.followMoodTheme) "Follow my mood" else "Always calm")
-        }
         Spacer(Modifier.height(16.dp))
         SettingsGroup("Speech") {
             ToggleRow("Read replies aloud", state.settings.readAloud, vm::setReadAloud)
@@ -110,21 +101,10 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
     }
     val close = { dialog = null }
     when (dialog) {
-        SettingsDialog.THEME -> AlertDialog(
-            onDismissRequest = close,
-            title = { Text("App theme") },
-            text = {
-                Column(Modifier.selectableGroup()) {
-                    ThemeOption("Follow my mood", "Colours change with the mood you pick", state.settings.followMoodTheme) { vm.setFollowMoodTheme(true); close() }
-                    ThemeOption("Always calm", "Keep the lavender theme everywhere", !state.settings.followMoodTheme) { vm.setFollowMoodTheme(false); close() }
-                }
-            },
-            confirmButton = { TextButton(onClick = close) { Text("Done") } }
-        )
         SettingsDialog.CLEAR_DATA -> AlertDialog(
             onDismissRequest = close,
             title = { Text("Delete conversation data?") },
-            text = { Text("This clears the current conversation and your saved mood on this device. Your settings stay as they are.") },
+            text = { Text("This clears the current conversation on this device. Your settings stay as they are.") },
             confirmButton = {
                 TextButton(onClick = {
                     close(); vm.clearDeviceData()
@@ -193,20 +173,6 @@ private fun AccountCard(state: AppViewModel.UiState, onSignIn: () -> Unit) {
     }
 }
 
-@Composable
-private fun ThemeOption(title: String, detail: String, selected: Boolean, onSelect: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).selectable(selected, role = Role.RadioButton, onClick = onSelect).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        RadioButton(selected = selected, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = AppColors.Primary))
-        Column {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.Ink)
-            Text(detail, fontSize = 13.sp, color = AppColors.Muted)
-        }
-    }
-}
-
 private class HelpTopic(val icon: ImageVector, val mood: Mood, val title: String, val summary: String, val detail: String)
 
 private val helpTopics = listOf(
@@ -214,8 +180,10 @@ private val helpTopics = listOf(
         "Let It Go is an AI listening companion. It can't diagnose or treat anything, and it isn't a therapist, doctor or emergency service."),
     HelpTopic(AppIcons.Sync, Mood.SAD, "How your messages are processed", "Sent to our server and an AI provider to\nreply",
         "Your messages are sent to our server and an AI provider so a reply can be written. Don't share anything you aren't comfortable sending to those services."),
-    HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Mood, settings on your device — not\nconversations",
-        "Your selected mood and settings stay on this device. We don't save chat history on our server, and a conversation is cleared when you close the app."),
+    HelpTopic(AppIcons.Speaker, Mood.TALK, "Talking avatar & voice", "How Ari's spoken replies move the live\nface",
+        "The live talking avatar uses Simli. Spoken AI reply audio is sent to Simli for lip sync while the live view is open. Typed messages and voice transcripts follow the normal chat processing path. Leaving the live view closes the video connection."),
+    HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Settings on your device — not\nconversations",
+        "Your settings stay on this device. We don't save chat history on our server, and a conversation is cleared when you close the app."),
     HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat or delete your account",
         "Start a new conversation from the ⋯ menu in a chat, clear conversation data on this device in Settings, or delete your account and saved app preferences in Settings › Account."),
     HelpTopic(AppIcons.People, Mood.LONELY, "Finding human support", "Helplines, counsellors and when to reach\nout",

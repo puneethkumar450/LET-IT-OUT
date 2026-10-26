@@ -11,15 +11,15 @@ Legend: ✅ implemented in source (verification noted separately) · 🔧 incomp
 - ✅ Simple user-editable STT transcripts + opt-in TTS playback
 - ✅ Error/loading/retry/clear handling, limited prototype safety routing
 - ✅ Basic privacy and support resources; no analytics or advertisements
-- ✅ Adult companion picker, persisted portrait choice, and static mood-driven expressions
-- ✅ Local debug/release builds and Pixel 9 Pro emulator visual check of chat, companion selection, and keyboard layout
+- ✅ Single Ari companion with a shared generated portrait across static Android views; debug Simli talking-avatar pilot
+- ✅ Local debug/release builds and Pixel 9 Pro emulator visual check of chat, Ari setup, and keyboard layout
 - ✅ Development Firebase Android/Admin credentials configured; guest sign-in, guest upgrade, and an AI reply previously verified on an emulator
 - ✅ Local backend health/readiness/auth rejection checks and HTTP route tests
 - 🔧 Fresh Google sign-in, account collision handling, and complete auth flow on a physical device
 - 🔧 Voice recognition and read-aloud behavior across devices
 - 🔧 Broader safe/unsafe fictional conversation testing with Groq; prototype keyword routing is not a validated safety system
 - 🔧 Improve user experience, onboarding retention, accessibility and dark mode
-- ✅ Android repository HTTP contract tests and emulator tests for preference reset and accessible companion-picker selection
+- ✅ Android repository HTTP contract tests and emulator tests for preference reset and Ari setup
 - ✅ ViewModel emulator tests for stale-reply cancellation and retry/edit behavior
 - 🔧 Broader chat/onboarding interaction and accessibility tests
 - 🔧 Complete account lifecycle, reauthentication and deletion policy; local preferences are cleared after confirmed account deletion

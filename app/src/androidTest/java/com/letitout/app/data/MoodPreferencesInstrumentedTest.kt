@@ -15,7 +15,7 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class MoodPreferencesInstrumentedTest {
-    @Test fun choicesPersistAcrossInstancesAndAccountResetClearsAllLocalPreferences() = runBlocking {
+    @Test fun preferencesPersistAcrossInstancesAndAccountResetClearsAllLocalPreferences() = runBlocking {
         // Instrumentation runs under the target app UID, so use a separate writable cache directory.
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val isolatedFiles = File(targetContext.cacheDir, "instrumented-preferences").apply { mkdirs() }
@@ -28,7 +28,6 @@ class MoodPreferencesInstrumentedTest {
 
         try {
             preferences.setMood(Mood.ANGRY)
-            preferences.setCompanion("man", "mature")
             preferences.setReadAloud(false)
             preferences.setVoiceInput(false)
             preferences.setFollowMoodTheme(false)
@@ -36,7 +35,6 @@ class MoodPreferencesInstrumentedTest {
 
             val reopened = MoodPreferences(context)
             assertEquals(Mood.ANGRY, reopened.mood.first())
-            assertEquals(CompanionChoice("man", "mature"), reopened.companion.first())
             assertFalse(reopened.settings.first().readAloud)
             assertFalse(reopened.settings.first().voiceInput)
             assertFalse(reopened.settings.first().followMoodTheme)
@@ -44,7 +42,6 @@ class MoodPreferencesInstrumentedTest {
 
             reopened.clearAll()
             assertEquals(Mood.TALK, preferences.mood.first())
-            assertEquals(CompanionChoice(), preferences.companion.first())
             assertTrue(preferences.settings.first().readAloud)
             assertTrue(preferences.settings.first().voiceInput)
             assertTrue(preferences.settings.first().followMoodTheme)

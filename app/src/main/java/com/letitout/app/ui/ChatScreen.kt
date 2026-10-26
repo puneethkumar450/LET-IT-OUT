@@ -24,16 +24,15 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,12 +54,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -84,12 +81,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -101,11 +100,12 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.letitout.app.data.ChatMessage
-import com.letitout.app.data.CompanionChoice
+import com.letitout.app.data.COMPANION_NAME
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPalette
 import com.letitout.app.data.palette
 import com.letitout.app.BuildConfig
+import com.letitout.app.R
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
@@ -115,8 +115,10 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun ChatScreen(
     vm: AppViewModel,
+    speechRuntime: AriSpeechRuntime,
+    liveController: LiveAvatarController,
+    openLiveOnEntry: Boolean,
     onHome: () -> Unit,
-    onChangeMood: () -> Unit,
     onHumanSupport: () -> Unit,
     onSignIn: () -> Unit
 ) {
@@ -130,20 +132,22 @@ internal fun ChatScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var speechError by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
-    var speechEnabled by remember { mutableStateOf(false) }
+    val speechEnabled = speechRuntime.ready
     var speakingId by remember { mutableStateOf<Long?>(null) }
     var liveRequested by remember { mutableStateOf(false) }
     var liveToken by remember { mutableStateOf<String?>(null) }
     var liveReady by remember { mutableStateOf(false) }
     var liveError by remember { mutableStateOf<String?>(null) }
-    var livePrompt by remember { mutableStateOf(false) }
+    var liveStartId by remember { mutableStateOf(0L) }
+    var autoStartAttempted by rememberSaveable { mutableStateOf(false) }
+    var liveOpenedAfter by remember { mutableStateOf(0L) }
+    var lastAutoSpokenId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     val main = remember { Handler(Looper.getMainLooper()) }
-    val liveController = remember { LiveAvatarController() }
     val liveUtterance = remember { AtomicReference<LiveUtterance?>(null) }
     val currentSpeechId = remember { AtomicReference<String?>(null) }
     val speechSerial = remember { AtomicLong(0L) }
-    val tts = remember { TextToSpeech(context) { result -> speechEnabled = result == TextToSpeech.SUCCESS } }
+    val tts = remember(speechRuntime) { speechRuntime.prepare() }
     DisposableEffect(tts) {
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
@@ -197,7 +201,11 @@ internal fun ChatScreen(
                 main.post { if (currentSpeechId.compareAndSet(utteranceId, null)) speakingId = null }
             }
         })
-        onDispose { liveUtterance.getAndSet(null)?.file?.delete(); tts.stop(); tts.shutdown() }
+        onDispose {
+            liveUtterance.getAndSet(null)?.file?.delete()
+            tts.stop()
+            tts.setOnUtteranceProgressListener(null)
+        }
     }
     val stopSpeaking: () -> Unit = {
         currentSpeechId.set(null)
@@ -207,20 +215,29 @@ internal fun ChatScreen(
         speakingId = null
     }
     val stopLive: () -> Unit = {
+        liveStartId += 1
         stopSpeaking()
         liveRequested = false
         liveReady = false
         liveToken = null
     }
+    val endConversation: () -> Unit = {
+        menuOpen = false
+        stopLive()
+        vm.newConversation()
+        onHome()
+    }
     val startLive: () -> Unit = {
+        val requestId = ++liveStartId
+        liveOpenedAfter = state.messages.maxOfOrNull { it.id } ?: 0L
         liveRequested = true
         liveError = null
         scope.launch {
             try {
-                val token = vm.avatarSessionToken()
-                if (liveRequested) liveToken = token
+                val token = vm.avatarSessionToken(if (state.settings.followMoodTheme) state.mood else Mood.TALK)
+                if (liveRequested && liveStartId == requestId) liveToken = token
             } catch (_: Exception) {
-                if (liveRequested) {
+                if (liveRequested && liveStartId == requestId) {
                     stopLive()
                     liveError = "Talking avatar is unavailable. The portrait and device voice still work."
                 }
@@ -251,6 +268,13 @@ internal fun ChatScreen(
             speechError = "Read aloud is unavailable on this device."
         }
     }
+    val transcriptReceived = androidx.compose.runtime.rememberUpdatedState<(String) -> Unit> { transcript ->
+        if (liveRequested && transcript.isNotBlank() && state.signedIn && !state.loading) {
+            stopSpeaking()
+            vm.send(transcript)
+            input = ""
+        } else input = transcript
+    }
     val recognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
     }
@@ -264,7 +288,8 @@ internal fun ChatScreen(
             override fun onError(error: Int) { isListening = false; speechError = "Speech couldn't be recognized. You can type instead." }
             override fun onResults(results: Bundle?) {
                 isListening = false
-                input = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                val transcript = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                main.post { transcriptReceived.value(transcript) }
             }
             override fun onPartialResults(partialResults: Bundle?) = Unit
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -284,8 +309,11 @@ internal fun ChatScreen(
     }
     val toggleMic: () -> Unit = {
         if (isListening) { recognizer?.stopListening(); isListening = false }
-        else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening()
-        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        else {
+            if (liveRequested) stopSpeaking()
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening()
+            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
     val canSend = state.signedIn && input.isNotBlank() && !state.loading
     val submitMessage: () -> Unit = {
@@ -301,147 +329,155 @@ internal fun ChatScreen(
     // Read new replies aloud, but never ones that were already on screen when this page opened.
     val seenUpTo = remember { state.messages.maxOfOrNull { it.id } ?: 0L }
     val latest = state.messages.lastOrNull()
-    LaunchedEffect(latest?.id, speechEnabled) {
-        if (latest != null && !latest.fromUser && latest.id > seenUpTo && state.settings.readAloud && speechEnabled) {
+    LaunchedEffect(latest?.id, speechEnabled, liveRequested) {
+        if (latest != null && !latest.fromUser && latest.id > seenUpTo && latest.id != lastAutoSpokenId &&
+            (state.settings.readAloud || (liveRequested && latest.id > liveOpenedAfter)) && speechEnabled) {
+            lastAutoSpokenId = latest.id
             speakMessage(latest)
         }
     }
     val itemCount = 2 + state.messages.size + (if (state.loading) 1 else 0) + (if (state.error != null) 1 else 0)
     LaunchedEffect(itemCount) { listState.animateScrollToItem(itemCount - 1) }
-    var pickerOpen by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = !pickerOpen, onBack = onHome)
+    BackHandler { if (liveRequested) stopLive() else onHome() }
 
     val supportMode = state.supportMode
     LaunchedEffect(supportMode) { if (supportMode && liveRequested) stopLive() }
+    LaunchedEffect(state.signedIn, supportMode) {
+        if (openLiveOnEntry && BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode && !autoStartAttempted) {
+            autoStartAttempted = true
+            startLive()
+        }
+    }
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
-    val companion = state.companion
-    val pilotCompanion = companion.gender == "woman" && companion.age == "adult"
-    val expression = if (supportMode) "calm" else state.mood.companionExpression()
-    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    BoxWithConstraints(Modifier.fillMaxSize().background(palette.surface)) {
-        val compactHeader = (keyboardVisible || maxHeight < 700.dp) && !liveRequested
-        if (pickerOpen) {
-            CompanionPickerScreen(
-                selectedGender = companion.gender,
-                selectedAge = companion.age,
-                onSelect = { gender, age -> stopLive(); vm.chooseCompanion(gender, age); pickerOpen = false },
-                onBack = { pickerOpen = false }
-            )
+    Box(Modifier.fillMaxSize().background(palette.surface)) {
+        if (liveRequested) {
+            Box(Modifier.fillMaxSize().background(palette.surface)) {
+                Image(
+                    painter = painterResource(R.drawable.ari_onboarding_fullscreen),
+                    contentDescription = "Ari, your AI companion",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                liveToken?.let { token ->
+                    LiveAvatarView(
+                        sessionToken = token,
+                        controller = liveController,
+                        backgroundColor = palette.surface,
+                        modifier = Modifier.fillMaxSize().zIndex(1f),
+                        onReady = { if (liveRequested && liveToken == token) liveReady = true },
+                        onFailure = {
+                            if (liveRequested && liveToken == token) {
+                                val interrupted = liveUtterance.getAndSet(null)
+                                interrupted?.file?.delete()
+                                if (interrupted != null && !interrupted.videoStarted) {
+                                    tts.stop()
+                                    val fallbackId = "${interrupted.message.id}:${speechSerial.incrementAndGet()}"
+                                    currentSpeechId.set(fallbackId)
+                                    tts.speak(interrupted.message.text, TextToSpeech.QUEUE_FLUSH, null, fallbackId)
+                                } else if (interrupted != null) stopSpeaking()
+                                liveRequested = false
+                                liveReady = false
+                                liveToken = null
+                                liveError = "Talking avatar disconnected. The portrait and device voice still work."
+                            }
+                        },
+                        onSpeaking = { liveUtterance.get()?.videoStarted = true },
+                        onSilent = {
+                            liveUtterance.get()?.takeIf { it.videoStarted }?.let {
+                                if (liveUtterance.compareAndSet(it, null)) {
+                                    it.file.delete()
+                                    if (currentSpeechId.compareAndSet(it.id, null)) speakingId = null
+                                }
+                            }
+                        }
+                    )
+                }
+                Column(
+                    Modifier.fillMaxSize().zIndex(3f).statusBarsPadding().navigationBarsPadding()
+                        .imePadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SquareIconButton(AppIcons.Back, "View chat summary", stopLive, shadowColor = palette.accent)
+                        ChipButton("End chat", endConversation, AppColors.Surface, AppColors.Danger)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (!liveReady) StatusPill("Connecting avatar…", palette.accent)
+                    if (!online) StatusPill("No internet connection", AppColors.Warning)
+                    speechError?.let { StatusPill(it, AppColors.Danger) }
+                    state.error?.let { StatusPill(it, AppColors.Danger) }
+                    if (isListening) StatusPill("Listening…", palette.accent)
+                    if (!state.signedIn) {
+                        Row(
+                            Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp))
+                                .padding(start = 16.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                        Text("Sign in to talk to $COMPANION_NAME.", Modifier.weight(1f), color = AppColors.Muted, fontSize = 13.sp)
+                            LinkButton("Sign in", AppColors.Primary, onSignIn)
+                        }
+                    }
+                    Composer(
+                        input = input, onInputChange = { input = it }, palette = palette,
+                        placeholder = "Type or speak to $COMPANION_NAME…",
+                        signedIn = state.signedIn, canSend = canSend, showMic = true, isListening = isListening,
+                        onMic = toggleMic, onSend = submitMessage,
+                        onDone = { focusManager.clearFocus(); keyboard?.hide() }
+                    )
+                }
+            }
         } else Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
             Column(
                 Modifier.fillMaxWidth().background(
                     Brush.verticalGradient(listOf(palette.tile, palette.surface))
-                ).statusBarsPadding().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = if (compactHeader) 10.dp else 17.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                ).statusBarsPadding().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 12.dp)
             ) {
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     SquareIconButton(AppIcons.Back, "Back to home", onHome, shadowColor = palette.accent)
-                    Spacer(Modifier.weight(1f))
-                    ChipButton("Human support", onHumanSupport, container = AppColors.Surface, content = AppColors.Ink, icon = AppIcons.Shield)
-                    Spacer(Modifier.size(8.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = palette.bubble,
+                        modifier = Modifier.size(48.dp).semantics { contentDescription = "Ari, your companion" }
+                    ) {
+                        CompanionPortrait(
+                            modifier = Modifier.padding(3.dp).clip(CircleShape)
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(COMPANION_NAME, style = DisplayStyle, fontSize = 18.sp, maxLines = 1)
+                        Text(
+                            if (supportMode) "Support options" else "Listening with care",
+                            color = AppColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
                     Box {
                         SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
-                            if (!supportMode) DropdownMenuItem(text = { Text("Change mood") }, onClick = { menuOpen = false; onChangeMood() })
-                            DropdownMenuItem(text = { Text("Change companion") }, onClick = { menuOpen = false; stopLive(); pickerOpen = true })
-                            if (BuildConfig.LIVE_AVATAR_PILOT && pilotCompanion && state.signedIn && !supportMode) {
+                            if (BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode) {
                                 DropdownMenuItem(
-                                    text = { Text(if (liveRequested) "Stop talking avatar" else "Try talking avatar") },
-                                    onClick = {
-                                        menuOpen = false
-                                        if (liveRequested) stopLive() else livePrompt = true
-                                    }
+                                    text = { Text("Return to live avatar") },
+                                    onClick = { menuOpen = false; startLive() }
                                 )
                             }
-                            DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation() })
-                            DropdownMenuItem(text = { Text("End conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation(); onHome() })
-                        }
-                    }
-                }
-                if (compactHeader) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        CompanionPortrait(
-                            companion.gender, companion.age, expression,
-                            modifier = Modifier.size(52.dp).clip(CircleShape),
-                            contentDescription = "${companion.age} ${companion.gender} companion"
-                        )
-                        Text("Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 22.sp)
-                        SmallPillButton("Change", { stopLive(); pickerOpen = true }, AppColors.Surface, palette.accent)
-                    }
-                } else {
-                    Box(
-                        Modifier.padding(top = 3.dp).size(158.dp)
-                            .background(palette.bubble, CircleShape)
-                            .padding(10.dp).clip(CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CompanionPortrait(
-                            companion.gender, companion.age, expression,
-                            modifier = Modifier.fillMaxSize(),
-                            contentDescription = "${companion.age} ${companion.gender} companion showing ${expression}"
-                        )
-                        liveToken?.let { token ->
-                            LiveAvatarView(
-                                sessionToken = token,
-                                controller = liveController,
-                                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                onReady = { if (liveRequested && liveToken == token) liveReady = true },
-                                onFailure = {
-                                    if (liveRequested && liveToken == token) {
-                                        val interrupted = liveUtterance.getAndSet(null)
-                                        interrupted?.file?.delete()
-                                        if (interrupted != null && !interrupted.videoStarted) {
-                                            tts.stop()
-                                            val fallbackId = "${interrupted.message.id}:${speechSerial.incrementAndGet()}"
-                                            currentSpeechId.set(fallbackId)
-                                            tts.speak(interrupted.message.text, TextToSpeech.QUEUE_FLUSH, null, fallbackId)
-                                        } else if (interrupted != null) stopSpeaking()
-                                        liveRequested = false
-                                        liveReady = false
-                                        liveToken = null
-                                        liveError = "Talking avatar disconnected. The portrait and device voice still work."
-                                    }
-                                },
-                                onSpeaking = { liveUtterance.get()?.videoStarted = true },
-                                onSilent = {
-                                    liveUtterance.get()?.takeIf { it.videoStarted }?.let {
-                                        if (liveUtterance.compareAndSet(it, null)) {
-                                            it.file.delete()
-                                            if (currentSpeechId.compareAndSet(it.id, null)) speakingId = null
-                                        }
-                                    }
-                                }
+                            HorizontalDivider(color = palette.accent.copy(alpha = .12f))
+                            DropdownMenuItem(
+                                text = { Text("Human support") },
+                                leadingIcon = { Icon(AppIcons.Shield, contentDescription = null) },
+                                onClick = { menuOpen = false; onHumanSupport() }
                             )
+                            HorizontalDivider(color = palette.accent.copy(alpha = .12f))
+                            DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation() })
+                            DropdownMenuItem(text = { Text("End conversation") }, onClick = endConversation)
                         }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(if (liveReady) "Live demo avatar" else "Your companion", Modifier.weight(1f), style = DisplayStyle, fontSize = 26.sp)
-                        SmallPillButton("Change", { stopLive(); pickerOpen = true }, AppColors.Surface, palette.accent)
-                    }
-                    Row(
-                        Modifier.padding(top = 7.dp).background(palette.bubble, CircleShape)
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        Box(Modifier.size(7.dp).background(palette.accent, CircleShape))
-                        Text(
-                            if (supportMode) "Human support options" else if (liveReady) "Demo avatar ready"
-                            else if (liveRequested) "Connecting avatar…" else "Listening with care",
-                            color = AppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }
@@ -457,24 +493,24 @@ internal fun ChatScreen(
                         color = AppColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                     )
                 }
-                item { AiBubble(palette.accent, companion, expression) { BubbleText(state.mood.prompt) } }
+                item { AiBubble(palette.accent) { BubbleText(state.mood.prompt) } }
                 items(state.messages, key = { it.id }) { message ->
                     val speakingFooter: (@Composable () -> Unit)? =
                         if (speakingId == message.id) { { SpeakingFooter(palette.accent, stopSpeaking) } } else null
                     when {
                         message.fromUser -> UserBubble(message.text, palette)
-                        message.supportResources -> SupportBubble(message.text, companion, footer = speakingFooter) { dialNumber(context, it) }
+                        message.supportResources -> SupportBubble(message.text, footer = speakingFooter) { dialNumber(context, it) }
                         else -> AiBubble(
-                            palette.accent, companion, expression,
+                            palette.accent,
                             footer = speakingFooter ?: { ListenFooter(palette.bubble, palette.accent) { speakMessage(message) } }
                         ) { BubbleText(message.text) }
                     }
                 }
-                if (state.loading) item { AiBubble(palette.accent, companion, expression) { TypingDots(palette.accent) } }
+                if (state.loading) item { AiBubble(palette.accent) { TypingDots(palette.accent) } }
                 state.error?.let { error ->
                     item {
                         ErrorBubble(
-                            error, palette, companion, canEdit = state.messages.lastOrNull()?.fromUser == true,
+                            error, palette, canEdit = state.messages.lastOrNull()?.fromUser == true,
                             onRetry = vm::retry, onEdit = { vm.editLastMessage()?.let { input = it } }
                         )
                     }
@@ -503,33 +539,12 @@ internal fun ChatScreen(
             }
         }
     }
-    if (livePrompt) AlertDialog(
-        onDismissRequest = { livePrompt = false },
-        title = { Text("Try a talking avatar?") },
-        text = { Text("This live demo avatar has a different face from your selected portrait. Spoken AI replies are sent as audio to Simli for lip sync. Turn it off anytime from the chat menu.") },
-        confirmButton = {
-            TextButton(onClick = { livePrompt = false; startLive() }) { Text("Start") }
-        },
-        dismissButton = {
-            TextButton(onClick = { livePrompt = false }) { Text("Cancel") }
-        }
-    )
 }
 
 private class LiveUtterance(val message: ChatMessage, val file: File, val id: String) {
     @Volatile var resampler: Pcm16Resampler? = null
     @Volatile var videoStarted: Boolean = false
     @Volatile var sentAudio: Boolean = false
-}
-
-private fun Mood.companionExpression(): String = when (this) {
-    Mood.ANGRY -> "angry"
-    Mood.SAD -> "sad"
-    Mood.STRESSED -> "stressed"
-    Mood.ANXIOUS -> "anxious"
-    Mood.LONELY -> "lonely"
-    Mood.HAPPY -> "happy"
-    Mood.TALK -> "calm"
 }
 
 @Composable
@@ -566,9 +581,8 @@ private fun UserBubble(text: String, palette: MoodPalette) {
 }
 
 @Composable
-private fun AiAvatar(companion: CompanionChoice, expression: String) {
+private fun AiAvatar() {
     CompanionPortrait(
-        companion.gender, companion.age, expression,
         modifier = Modifier.size(46.dp).clip(CircleShape),
         contentDescription = null
     )
@@ -577,14 +591,12 @@ private fun AiAvatar(companion: CompanionChoice, expression: String) {
 @Composable
 private fun AiBubble(
     accent: Color,
-    companion: CompanionChoice,
-    expression: String,
     footer: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(companion, expression)
+        AiAvatar()
         Column(
             Modifier.widthIn(max = 300.dp).softShadow(accent, shape, 2.dp).background(AppColors.Surface, shape).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -652,10 +664,10 @@ private fun Modifier.dashedBorder(color: Color, shape: Shape, width: Dp = 1.5.dp
 }
 
 @Composable
-private fun ErrorBubble(message: String, palette: MoodPalette, companion: CompanionChoice, canEdit: Boolean, onRetry: () -> Unit, onEdit: () -> Unit) {
+private fun ErrorBubble(message: String, palette: MoodPalette, canEdit: Boolean, onRetry: () -> Unit, onEdit: () -> Unit) {
     val shape = RoundedCornerShape(22.dp, 22.dp, 22.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(companion, "calm")
+        AiAvatar()
         Column(
             Modifier.widthIn(max = 300.dp).background(AppColors.Surface, shape).dashedBorder(palette.accent.copy(alpha = .45f), shape)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -674,10 +686,10 @@ private fun ErrorBubble(message: String, palette: MoodPalette, companion: Compan
 }
 
 @Composable
-private fun SupportBubble(text: String, companion: CompanionChoice, footer: (@Composable () -> Unit)?, onDial: (String) -> Unit) {
+private fun SupportBubble(text: String, footer: (@Composable () -> Unit)?, onDial: (String) -> Unit) {
     val shape = RoundedCornerShape(24.dp, 24.dp, 24.dp, 6.dp)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AiAvatar(companion, "calm")
+        AiAvatar()
         Column(
             Modifier.weight(1f).softShadow(AppColors.Primary, shape, 4.dp).background(AppColors.Surface, shape).padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)

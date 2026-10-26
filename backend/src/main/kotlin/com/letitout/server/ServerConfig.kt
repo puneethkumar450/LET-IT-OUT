@@ -8,6 +8,7 @@ internal data class ServerConfig(
     val groqModel: String,
     val simliApiKey: String?,
     val simliFaceId: String?,
+    val simliBackgroundIds: Map<String, String>,
     val port: Int,
     val perUserHourlyLimit: Int,
     val globalHourlyLimit: Int
@@ -36,11 +37,15 @@ internal data class ServerConfig(
             val simliApiKey = env["SIMLI_API_KEY"]?.trim()?.takeIf { it.isNotEmpty() }
             val simliFaceId = (env["SIMLI_FACE_ID_PILOT"] ?: env["SIMLI_FACE_ID_WOMAN_ADULT"])
                 ?.trim()?.takeIf { it.isNotEmpty() }
+            val simliBackgroundIds = listOf("ANGRY", "SAD", "STRESSED", "ANXIOUS", "LONELY", "HAPPY", "TALK")
+                .mapNotNull { mood ->
+                    env["SIMLI_BACKGROUND_ID_$mood"]?.trim()?.takeIf { it.isNotEmpty() }?.let { mood to it }
+                }.toMap()
             if (production) {
                 require(projectId != null) { "FIREBASE_PROJECT_ID is required in production" }
                 if (chatEnabled) require(apiKey != null) { "GROQ_API_KEY is required when production chat is enabled" }
             }
-            return ServerConfig(production, chatEnabled, projectId, apiKey, model, simliApiKey, simliFaceId, port, perUserLimit, globalLimit)
+            return ServerConfig(production, chatEnabled, projectId, apiKey, model, simliApiKey, simliFaceId, simliBackgroundIds, port, perUserLimit, globalLimit)
         }
     }
 }

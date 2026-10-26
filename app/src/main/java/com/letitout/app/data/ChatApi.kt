@@ -12,15 +12,23 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import retrofit2.http.Body
 import retrofit2.http.Header
+import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import okhttp3.ResponseBody
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
 interface ChatApi {
+    @GET("health")
+    suspend fun health(): ResponseBody
+
     @POST("v1/chat")
     suspend fun chat(
         @Header("Authorization") authorization: String,
@@ -28,12 +36,20 @@ interface ChatApi {
     ): ChatResponse
 
     @POST("v1/avatar/session")
-    suspend fun avatarSession(@Header("Authorization") authorization: String): AvatarSessionResponse
+    suspend fun avatarSession(@Header("Authorization") authorization: String, @Query("mood") mood: String): AvatarSessionResponse
 }
 
 @Singleton
 class ChatRepository @Inject constructor(private val api: ChatApi, private val tokenProvider: SessionTokenProvider) {
-    suspend fun avatarSessionToken(): String = api.avatarSession("Bearer ${tokenProvider.idToken()}").sessionToken
+    /** Warms Firebase auth and the existing backend connection without starting a Simli session. */
+    suspend fun prewarm(): Unit = coroutineScope {
+        val auth = async { tokenProvider.idToken() }
+        val backend = async { api.health().close() }
+        auth.await()
+        backend.await()
+    }
+
+    suspend fun avatarSessionToken(mood: Mood): String = api.avatarSession("Bearer ${tokenProvider.idToken()}", mood.name).sessionToken
     suspend fun reply(mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null): ChatResponse {
         val idToken = tokenProvider.idToken()
         return api.chat(

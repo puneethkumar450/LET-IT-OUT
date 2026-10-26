@@ -5,51 +5,45 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercises the actual picker through Android accessibility actions, without changing saved app data. */
+/** Exercises first-time companion setup through Android accessibility actions. */
 @RunWith(AndroidJUnit4::class)
-class CompanionPickerInteractionTest {
-    @Test fun choosingMatureManUpdatesPortraitAndConfirmsSelection() {
+class CompanionSetupInteractionTest {
+    @Test fun firstTimeSetupShowsAriPortraitWithoutGenderChoices() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        CompanionPickerHostActivity.confirmed.set(null)
-        val scenario = ActivityScenario.launch(CompanionPickerHostActivity::class.java)
+        CompanionSetupHostActivity.confirmed.set(false)
+        val scenario = ActivityScenario.launch(CompanionSetupHostActivity::class.java)
         try {
             instrumentation.waitForIdleSync()
 
-            tap("Man")
-            tap("Mature")
-
             val portrait = awaitNode { root ->
-                findDescendant(root) { it.contentDescription?.toString() == "Mature man companion portrait" }
+                findDescendant(root) { it.contentDescription?.toString() == "Ari, your AI companion" }
             }
-            assertNotNull("Portrait should reflect both choices", portrait)
-
-            val matureNode = awaitNode { root -> findExactText(root, "Mature") }
-            assertNotNull("Mature option should remain visible", matureNode)
-            val matureAncestors = ancestors(matureNode!!).toList()
-            assertTrue(
-                "Mature option should expose selected state: " + matureAncestors.map {
-                    "${it.className}: selected=${it.isSelected}, checked=${it.isChecked}, state=${it.stateDescription}"
-                },
-                matureAncestors.any { it.isSelected || it.isChecked || it.stateDescription?.contains("selected", ignoreCase = true) == true }
+            assertNotNull("Setup should show the generated Ari portrait", portrait)
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            assertNull("Gender selection must be hidden", root?.let { findExactText(it, "Woman") })
+            assertNull("Gender selection must be hidden", root?.let { findExactText(it, "Man") })
+            assertNotNull(
+                "Setup should disclose live voice sharing",
+                root?.let { findExactText(it, "Spoken replies go to Simli for lip sync. Your chat summary is one tap away.") }
             )
 
-            tap("Use this companion")
-            assertEquals("Confirmed choice should match the visible portrait", "man" to "mature", CompanionPickerHostActivity.confirmed.get())
+            tap("Continue with Ari")
+            assertTrue("Continue should finish companion setup", CompanionSetupHostActivity.confirmed.get())
         } finally {
             scenario.close()
-            CompanionPickerHostActivity.confirmed.set(null)
+            CompanionSetupHostActivity.confirmed.set(false)
         }
     }
 
     private fun tap(text: String) {
         val node = awaitNode { root -> findExactText(root, text) }
-        assertNotNull("Could not find $text in the picker", node)
+        assertNotNull("Could not find $text in setup", node)
         val target = ancestors(node!!).firstOrNull { it.isClickable }
         assertNotNull("$text has no clickable ancestor", target)
         target!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)

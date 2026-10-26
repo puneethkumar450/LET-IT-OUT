@@ -2,6 +2,8 @@ package com.letitout.app.data
 
 import androidx.compose.ui.graphics.Color
 
+const val COMPANION_NAME = "Ari"
+
 enum class Mood(val label: String, val prompt: String, val heading: String, val reassurance: String) {
     ANGRY("Angry", "What happened today? I'm listening.", "Feeling angry", "It's okay to feel this way. You can say it however it comes out — no judgment here."),
     SAD("Sad", "I'm here. Whenever you're ready, what's been on your mind?", "Feeling sad", "You don't have to explain it perfectly. Take all the time you need."),

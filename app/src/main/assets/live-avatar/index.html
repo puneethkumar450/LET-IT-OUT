@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-    video { display: block; width: 100%; height: 100%; object-fit: cover; }
+    video { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0.01; }
+    canvas { display: none; }
     audio { display: none; }
   </style>
 </head>
 <body>
   <video id="avatar-video" autoplay playsinline muted></video>
+  <canvas id="avatar-canvas" width="384" height="684"></canvas>
   <audio id="avatar-audio" autoplay></audio>
   <script src="bridge.js"></script>
 </body>

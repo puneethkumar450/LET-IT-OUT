@@ -32,16 +32,17 @@ private fun avatarReady(config: ServerConfig): Boolean =
         com.google.firebase.FirebaseApp.getApps().isNotEmpty()
 
 /** Only the server knows the face ID and API key. The client receives a short-lived session token. */
-private suspend fun simliSessionToken(config: ServerConfig): String = withContext(Dispatchers.IO) {
+private suspend fun simliSessionToken(config: ServerConfig, mood: String): String = withContext(Dispatchers.IO) {
     val body = buildJsonObject {
         put("faceId", requireNotNull(config.simliFaceId))
         put("apiVersion", "v2")
         put("handleSilence", true)
         put("maxSessionLength", 300)
-        put("maxIdleTime", 60)
+        put("maxIdleTime", 120)
         put("audioInputFormat", "pcm16")
-        put("streaming_width", 512)
-        put("streaming_height", 512)
+        put("streaming_width", 576)
+        put("streaming_height", 1024)
+        config.simliBackgroundIds[mood]?.let { put("background_id", it) }
     }
     val request = HttpRequest.newBuilder(URI.create("https://api.simli.ai/compose/token"))
         .header("x-simli-api-key", requireNotNull(config.simliApiKey))
@@ -59,7 +60,7 @@ private suspend fun simliSessionToken(config: ServerConfig): String = withContex
 internal data class AvatarDependencies(
     val ready: (ServerConfig) -> Boolean = ::avatarReady,
     val verifyUid: suspend (String, ServerConfig) -> String = ::verifiedUid,
-    val createSession: suspend (ServerConfig) -> String = ::simliSessionToken,
+    val createSession: suspend (ServerConfig, String) -> String = ::simliSessionToken,
     val rateLimiter: (ServerConfig) -> RateLimiter = { config ->
         if (config.production) FirestoreRateLimiter(3, 60, "avatar_rate_limits")
         else LocalRateLimiter(3, 60)
@@ -90,7 +91,10 @@ internal fun Route.registerAvatarRoutes(config: ServerConfig, dependencies: Avat
         }
         if (!allowed) return@post call.respond(HttpStatusCode.TooManyRequests)
         try {
-            val token = dependencies.createSession(config)
+            val mood = call.request.queryParameters["mood"]?.uppercase()
+                ?.takeIf { it in setOf("ANGRY", "SAD", "STRESSED", "ANXIOUS", "LONELY", "HAPPY", "TALK") }
+                ?: "TALK"
+            val token = dependencies.createSession(config, mood)
             call.respondText(avatarJson.encodeToString(AvatarSessionResponse(token)), ContentType.Application.Json)
         } catch (cancel: CancellationException) {
             throw cancel

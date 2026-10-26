@@ -78,19 +78,31 @@ class ChatRepositoryTest {
 
     @Test fun avatarSessionUsesFirebaseAuthorizationAndReceivesOnlyShortLivedToken() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{"sessionToken":"short-lived"}"""))
-        assertEquals("short-lived", repository().avatarSessionToken())
+        assertEquals("short-lived", repository().avatarSessionToken(Mood.ANGRY))
         val request = server.takeRequest()
-        assertEquals("/v1/avatar/session", request.path)
+        assertEquals("/v1/avatar/session?mood=ANGRY", request.path)
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
         assertEquals(0, request.body.size)
     }
 
+    @Test fun prewarmUsesHealthWithoutStartingAvatarSession() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("ok"))
+
+        repository().prewarm()
+
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/health", request.path)
+        assertEquals(1, server.requestCount)
+    }
+
     @Test fun missingSessionNeverSendsPrivateConversation() {
         val api = object : ChatApi {
+            override suspend fun health() = throw AssertionError("Health request must not run without a session")
             override suspend fun chat(authorization: String, request: ChatRequest): ChatResponse {
                 throw AssertionError("Chat request must not run without a session")
             }
-            override suspend fun avatarSession(authorization: String): AvatarSessionResponse {
+            override suspend fun avatarSession(authorization: String, mood: String): AvatarSessionResponse {
                 throw AssertionError("Avatar request must not run without a session")
             }
         }

@@ -55,8 +55,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.letitout.app.data.Mood
-import com.letitout.app.data.palette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -64,7 +62,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 @Composable
-internal fun SplashScreen(companionGender: String, companionAge: String, onContinue: () -> Unit) {
+internal fun SplashScreen(onContinue: () -> Unit) {
     val latestOnContinue by rememberUpdatedState(onContinue)
     var continued by remember { mutableStateOf(false) }
     val continueOnce: () -> Unit = {
@@ -82,9 +80,8 @@ internal fun SplashScreen(companionGender: String, companionAge: String, onConti
             Box(Modifier.size(184.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(174.dp).background(AppColors.Lavender, CircleShape))
                 CompanionPortrait(
-                    companionGender, companionAge, "calm",
                     modifier = Modifier.size(152.dp).clip(CircleShape),
-                    contentDescription = "AI companion portrait"
+                    contentDescription = "Ari, the live AI companion"
                 )
                 BrandMark(Modifier.align(Alignment.BottomEnd), size = 52.dp, corner = 16.dp, glyph = 29.dp)
             }
@@ -105,9 +102,9 @@ private class OnboardingPage(val title: String, val body: String)
 
 private val onboardingPages = listOf(
     OnboardingPage("A Space to Express Yourself", "Talk about whatever is on your mind."),
-    OnboardingPage("Name How You Feel", "Pick a mood, or just start talking. No label needed."),
+    OnboardingPage("Start Anywhere", "A few words are enough. There's no mood to pick first."),
     OnboardingPage("Speak or Type", "Say it out loud or write it down, at your own pace."),
-    OnboardingPage("Meet Your Companion", "Choose an adult portrait you feel comfortable talking to. You can change it anytime.")
+    OnboardingPage("Meet Your Companion", "Meet Ari, your live AI companion. Your conversation summary is always available.")
 )
 
 @Composable
@@ -149,10 +146,9 @@ private fun OnboardingArt(page: Int) {
             ArtBubble("Today was a lot. I don't even know where to start.", fromUser = false, Modifier.align(Alignment.Start))
             ArtBubble("That's okay. Start anywhere — I'm listening.", fromUser = true, Modifier.align(Alignment.End))
         }
-        1 -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(Mood.ANGRY to Mood.SAD, Mood.STRESSED to Mood.HAPPY).forEach { (left, right) ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ArtMoodTile(left); ArtMoodTile(right) }
-            }
+        1 -> Column(Modifier.width(236.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ArtBubble("I don't know how to say it.", fromUser = false, Modifier.align(Alignment.Start))
+            ArtBubble("Begin there. Ari can listen.", fromUser = true, Modifier.align(Alignment.End))
         }
         2 -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(Modifier.size(120.dp).softShadow(AppColors.Primary, CircleShape, 10.dp).background(AppColors.Surface, CircleShape), contentAlignment = Alignment.Center) {
@@ -160,17 +156,11 @@ private fun OnboardingArt(page: Int) {
             }
             ArtBubble("Speak or type — whatever feels easier.", fromUser = false)
         }
-        else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("woman" to "young", "woman" to "adult", "man" to "mature").forEachIndexed { index, (gender, age) ->
-                Box(
-                    Modifier.size(if (index == 1) 100.dp else 84.dp)
-                        .softShadow(AppColors.Primary, CircleShape, 5.dp)
-                        .background(AppColors.Surface, CircleShape)
-                        .padding(4.dp).clip(CircleShape)
-                ) {
-                    CompanionPortrait(gender, age, "calm", Modifier.fillMaxSize())
-                }
-            }
+        else -> Box(
+            Modifier.size(150.dp).softShadow(AppColors.Primary, CircleShape, 5.dp)
+                .background(AppColors.Surface, CircleShape).padding(6.dp).clip(CircleShape)
+        ) {
+            CompanionPortrait(modifier = Modifier.fillMaxSize(), contentDescription = "Ari")
         }
     }
 }
@@ -184,20 +174,6 @@ private fun ArtBubble(text: String, fromUser: Boolean, modifier: Modifier = Modi
             .background(color, shape).padding(horizontal = 16.dp, vertical = 18.dp),
         color = if (fromUser) Color.White else AppColors.Ink, fontSize = 14.sp, lineHeight = 19.sp
     )
-}
-
-@Composable
-private fun ArtMoodTile(mood: Mood) {
-    val palette = mood.palette()
-    Column(
-        Modifier.width(112.dp).background(palette.tile, RoundedCornerShape(22.dp)).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(Modifier.size(36.dp).background(AppColors.Surface, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(mood.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
-        }
-        Text(mood.label, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-    }
 }
 
 @Composable
@@ -235,11 +211,11 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
         decor = { Blob(340.dp, AppColors.Lavender, Modifier.align(Alignment.TopEnd).offset(120.dp, (-140).dp)) }
     ) {
         BrandMark(size = 56.dp, corner = 15.dp, glyph = 31.dp)
-        Spacer(Modifier.height(56.dp))
+        Spacer(Modifier.height(28.dp))
         Text("Welcome", style = DisplayStyle, fontSize = 32.sp, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(10.dp))
-        Text("Continue with Google or as a guest. Your mood and companion choices stay on this device.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
-        Spacer(Modifier.height(72.dp))
+        Text("Continue with Google or as a guest to talk with Ari. You can start whenever you're ready.", color = AppColors.Muted, fontSize = 16.sp, lineHeight = 24.sp)
+        Spacer(Modifier.height(48.dp))
         OutlinePillButton("Continue with Google", enabled = vm.auth.isGoogleConfigured() && !working, leading = { GoogleBadge() }, onClick = {
             attempt("Google sign-in didn't complete") { vm.auth.signInGoogle(activity) }
         })

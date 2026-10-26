@@ -14,60 +14,26 @@ import androidx.compose.ui.unit.IntSize
 import com.letitout.app.R
 import kotlin.math.roundToInt
 
-/**
- * Displays one cell from the selected companion's 3 × 3 expression sheet.
- * The sheets use identical framing in each cell, so changing expression keeps
- * the face at the same size and position. Only the selected sheet is decoded.
- *
- * The caller controls the frame. For a round portrait, apply `clip(CircleShape)`
- * to [modifier]. The image itself remains square so it can also fill a hero.
- */
+/** A face crop of the same generated Ari portrait used on the full-screen setup. */
 @Composable
-fun CompanionPortrait(
-    gender: String,
-    age: String,
-    expression: String,
-    modifier: Modifier = Modifier,
-    contentDescription: String? = null
-) {
-    val resourceId = companionSheet(gender, age)
-    val image = ImageBitmap.imageResource(id = resourceId)
-    val cell = expressionCell(expression)
+fun CompanionPortrait(modifier: Modifier = Modifier, contentDescription: String? = null) {
+    val image = ImageBitmap.imageResource(id = R.drawable.ari_onboarding_fullscreen)
     val describedModifier = if (contentDescription.isNullOrBlank()) modifier else {
         modifier.semantics { this.contentDescription = contentDescription }
     }
 
     Canvas(describedModifier.aspectRatio(1f)) {
-        val cellWidth = image.width / 3
-        val cellHeight = image.height / 3
+        // Keep Ari's face prominent at small sizes without creating a second portrait asset.
+        val cropSize = (image.width * .68f).roundToInt()
+        val cropLeft = (image.width - cropSize) / 2
+        val cropTop = (image.height * .055f).roundToInt()
         drawImage(
             image = image,
-            srcOffset = IntOffset(cell.first * cellWidth, cell.second * cellHeight),
-            srcSize = IntSize(cellWidth, cellHeight),
+            srcOffset = IntOffset(cropLeft, cropTop),
+            srcSize = IntSize(cropSize, cropSize),
             dstOffset = IntOffset.Zero,
             dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
             filterQuality = FilterQuality.High
         )
     }
-}
-
-private fun companionSheet(gender: String, age: String): Int = when (gender.lowercase() to age.lowercase()) {
-    "woman" to "young" -> R.drawable.companion_woman_young
-    "woman" to "mature" -> R.drawable.companion_woman_mature
-    "man" to "young" -> R.drawable.companion_man_young
-    "man" to "adult" -> R.drawable.companion_man_adult
-    "man" to "mature" -> R.drawable.companion_man_mature
-    else -> R.drawable.companion_woman_adult
-}
-
-private fun expressionCell(expression: String): Pair<Int, Int> = when (expression.lowercase()) {
-    "angry" -> 1 to 0
-    "sad" -> 2 to 0
-    "stressed" -> 0 to 1
-    "anxious" -> 1 to 1
-    "lonely" -> 2 to 1
-    "happy" -> 0 to 2
-    "worried" -> 1 to 2
-    "doubtful" -> 2 to 2
-    else -> 0 to 0
 }

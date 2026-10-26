@@ -11,29 +11,36 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.letitout.app.data.Mood
-import com.letitout.app.data.palette
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.letitout.app.ui.AppColors
 import com.letitout.app.ui.AppTypography
 import com.letitout.app.ui.AppViewModel
+import com.letitout.app.ui.AriSpeechRuntime
 import com.letitout.app.ui.ChatScreen
-import com.letitout.app.ui.CompanionPickerScreen
+import com.letitout.app.ui.CompanionSetupScreen
 import com.letitout.app.ui.HomeScreen
-import com.letitout.app.ui.MoodCheckInScreen
+import com.letitout.app.ui.LiveAvatarController
 import com.letitout.app.ui.OnboardingScreen
 import com.letitout.app.ui.PrivacyHelpScreen
 import com.letitout.app.ui.SettingsScreen
 import com.letitout.app.ui.SignInScreen
 import com.letitout.app.ui.SplashScreen
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -66,9 +73,24 @@ private val appColorScheme = lightColorScheme(
 @Composable
 private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val speechRuntime = remember(context) { AriSpeechRuntime(context) }
+    DisposableEffect(speechRuntime) { onDispose { speechRuntime.close() } }
+    val liveController = remember(context) { LiveAvatarController() }
+    DisposableEffect(liveController) { onDispose { liveController.destroy() } }
     var backStack by rememberSaveable { mutableStateOf(listOf("splash")) }
-    var checkInMood by rememberSaveable { mutableStateOf(Mood.ANGRY) }
+    var openLiveOnEntry by rememberSaveable { mutableStateOf(true) }
     val page = backStack.last()
+    LaunchedEffect(page, state.signedIn, lifecycleOwner, speechRuntime) {
+        if (page == "home") lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (state.signedIn) vm.prewarmAri()
+            delay(250)
+            speechRuntime.prepare()
+            delay(450)
+            if (BuildConfig.LIVE_AVATAR_PILOT && state.signedIn) liveController.preload(context)
+        }
+    }
     val navigateTo: (String) -> Unit = { destination -> backStack = backStack + destination }
     val resetTo: (String) -> Unit = { destination -> backStack = listOf(destination) }
     val navigateBack: () -> Unit = {
@@ -87,18 +109,15 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
     MaterialTheme(colorScheme = appColorScheme, typography = AppTypography) {
         Surface(color = AppColors.Background, modifier = Modifier.fillMaxSize()) {
             when (page) {
-                "splash" -> SplashScreen(state.companion.gender, state.companion.age) {
+                "splash" -> SplashScreen {
                     resetTo(if (state.signedIn || state.settings.onboarded) "home" else "onboarding")
                 }
                 "onboarding" -> OnboardingScreen(
-                    onSkip = { vm.finishOnboarding(); resetTo("home") },
+                    onSkip = { navigateTo("companion") },
                     onGetStarted = { navigateTo("companion") }
                 )
-                "companion" -> CompanionPickerScreen(
-                    selectedGender = state.companion.gender,
-                    selectedAge = state.companion.age,
-                    onSelect = { gender, age ->
-                        vm.chooseCompanion(gender, age)
+                "companion" -> CompanionSetupScreen(
+                    onContinue = {
                         vm.finishOnboarding()
                         navigateTo("signin")
                     },
@@ -106,23 +125,17 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                 )
                 "signin" -> SignInScreen(vm, onSignedIn = finishSignIn, onPreview = finishSignIn, onPrivacy = { navigateTo("privacy") })
                 "home" -> HomeScreen(
-                    onMood = { mood -> checkInMood = mood; navigateTo("mood") },
-                    onJustTalk = { vm.chooseMood(Mood.TALK); navigateTo("chat") },
-                    onLetsTalk = { navigateTo("chat") },
-                    onNewConversation = { vm.newConversation(); navigateTo("chat") },
+                    hasSummary = state.messages.isNotEmpty(),
+                    onStartTalking = { openLiveOnEntry = true; navigateTo("chat") },
+                    onViewSummary = { openLiveOnEntry = false; navigateTo("chat") },
                     onSettings = { navigateTo("settings") }
-                )
-                "mood" -> MoodCheckInScreen(
-                    mood = checkInMood,
-                    palette = if (state.settings.followMoodTheme) checkInMood.palette() else Mood.TALK.palette(),
-                    onBack = navigateBack,
-                    onChangeMood = navigateBack,
-                    onStart = { intensity -> vm.chooseMood(checkInMood, intensity); navigateTo("chat") }
                 )
                 "chat" -> ChatScreen(
                     vm,
+                    speechRuntime = speechRuntime,
+                    liveController = liveController,
+                    openLiveOnEntry = openLiveOnEntry,
                     onHome = { popTo("home") },
-                    onChangeMood = { popTo("home") },
                     onHumanSupport = { navigateTo("privacy") },
                     onSignIn = { navigateTo("signin") }
                 )
