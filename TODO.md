@@ -9,7 +9,9 @@ Goal: a Play Store closed test that strangers can join from a public post.
   - [x] Tests, plus a live spot check: 13/13 sample messages classified correctly
 - [x] 2. "Test version" notice in the app (Home + top of every chat; text in `TEST_BUILD_NOTICE`, remove before public release)
   - "This is a test version of an AI companion. It's not a substitute for professional help. If you're in crisis, call 14416 or 112."
-- [ ] 3. Put the backend online (Cloud Run free tier, ₹0–100 budget alert) — needs your Google Cloud account
+- [ ] 3. Put the backend online (Cloud Run free tier, ₹0–100 budget alert) — **waiting on you**: install the Google Cloud CLI and sign in, then I can run the deploy (steps in docs/PRODUCTION_BACKEND.md)
 - [ ] 4. Privacy policy page on let-it-go.in (Play requires a public URL)
+  - [x] Drafted: web/dist/privacy/index.html (also covers account deletion at /privacy/#delete-account)
+  - [ ] **Waiting on you**: contact email to replace [CONTACT EMAIL], then OK to publish (pushing web `main` deploys the site)
 - [x] 5. $25 Play developer account and closed test
 - [ ] 6. Post the opt-in link (Reddit / Instagram / LinkedIn), aim for 20+ testers for 14 days
