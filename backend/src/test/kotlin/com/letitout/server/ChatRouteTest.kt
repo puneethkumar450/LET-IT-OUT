@@ -82,6 +82,41 @@ class ChatRouteTest {
         assertEquals(1, providerCalls)
     }
 
+    @Test fun classifierFlagOpensCrisisSupportAndClassifierFailureFallsBackToReply() = testApplication {
+        var providerCalls = 0
+        application {
+            module(config, ChatDependencies(
+                ready = { true },
+                verifyUid = { _, _ -> "test-user" },
+                reply = { _, _ -> providerCalls++; "I'm listening." },
+                safetyCheck = { req, _ ->
+                    val text = req.messages.last().content
+                    if (text.contains("broken")) error("classifier down")
+                    text.contains("point anymore")
+                },
+                rateLimiter = { allowAll() }
+            ))
+        }
+
+        val indirect = client.post("/v1/chat") {
+            header(HttpHeaders.Authorization, "Bearer valid")
+            contentType(ContentType.Application.Json)
+            setBody(message("I can't see the point anymore"))
+        }
+        assertEquals(HttpStatusCode.OK, indirect.status)
+        assertTrue(indirect.bodyAsText().contains("CRISIS_SUPPORT"))
+        assertEquals(0, providerCalls)
+
+        val classifierDown = client.post("/v1/chat") {
+            header(HttpHeaders.Authorization, "Bearer valid")
+            contentType(ContentType.Application.Json)
+            setBody(message("my phone is broken"))
+        }
+        assertEquals(HttpStatusCode.OK, classifierDown.status)
+        assertTrue(classifierDown.bodyAsText().contains("NORMAL"))
+        assertEquals(1, providerCalls)
+    }
+
     @Test fun rateLimitRejectsChatBeforeCallingProvider() = testApplication {
         var providerCalls = 0
         application {

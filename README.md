@@ -17,7 +17,7 @@ The app display name and website brand are LET IT GO. The existing Android appli
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in, connected to the development Firebase project `let-it-out-d661a` through the ignored `app/google-services.json`.
 - Ktor backend exposing `/health`, `/ready`, and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, and limiting input and traffic. Production mode uses Firestore shared counters and starts with chat disabled.
 - Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
-- An intentionally limited **prototype-only** crisis keyword guard plus configurable support resources. **Not a clinically validated or sufficient production safety system.**
+- Prototype crisis detection: a phrase check (English and common Hindi phrases) plus a Groq-hosted model (`openai/gpt-oss-20b`, set by `GROQ_SAFETY_MODEL`) that classifies the recent conversation against a written self-harm policy. If either flags risk, the app shows the Tele-MANAS/112 support card. **Not a clinically validated or sufficient production safety system.**
 - No AdMob, analytics trackers, background microphone, or large downloadable AI models. The debug talking avatar pilot uses WebRTC.
 
 ## 1. Open Android project

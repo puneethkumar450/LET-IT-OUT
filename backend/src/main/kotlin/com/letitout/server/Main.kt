@@ -37,17 +37,6 @@ private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(7)).build()
 private val supportedMoods = setOf("ANGRY", "SAD", "STRESSED", "ANXIOUS", "LONELY", "HAPPY", "TALK")
 
-// Prototype guardrails only. This does not reliably detect or triage all crises.
-internal fun mayNeedImmediateHelp(text: String): Boolean {
-    val content = text.lowercase()
-    val signals = listOf(
-        "kill myself", "end my life", "want to die", "going to suicide",
-        "hurt myself", "i will kill", "going to kill someone",
-        "i'm about to hurt", "i want to kill myself", "i am going to hurt"
-    )
-    return signals.any { it in content }
-}
-
 private val prompt = """
 You are Ari, the LET IT GO AI emotional listening companion for adults.
 If asked your name, introduce yourself as Ari, an AI companion.
@@ -59,6 +48,7 @@ Use 1-3 brief sentences unless the user asks for more. Avoid generic positivity 
 Never claim certainty about the person's feelings, diagnoses, or future.
 Do not encourage self-harm, violence, revenge, isolation, or exclusive attachment to the AI.
 If you suspect imminent danger or risk of self-harm, prioritize immediate human help rather than ordinary chat.
+If the person sounds hopeless or hints at not wanting to live, gently and directly ask whether they are thinking about ending their life, and encourage them to call Tele-MANAS on 14416 or 112 in an emergency (India).
 You can respond in the user's language when confident; do not invent helpline information.
 """.trimIndent()
 
@@ -99,11 +89,16 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
             }
         }
     }
+    groqCompletion(apiKey, body, timeoutSeconds = 25)
+}
+
+/** Sends one chat-completions request to Groq and returns the reply text. */
+internal fun groqCompletion(apiKey: String, body: JsonObject, timeoutSeconds: Long): String {
     val request = HttpRequest.newBuilder(URI.create("https://api.groq.com/openai/v1/chat/completions"))
         .header("Authorization", "Bearer $apiKey")
         .header("Content-Type", "application/json")
         .header("User-Agent", "LET-IT-GO/0.1")
-        .timeout(Duration.ofSeconds(25))
+        .timeout(Duration.ofSeconds(timeoutSeconds))
         .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
         .build()
     val response = http.send(request, HttpResponse.BodyHandlers.ofString())
@@ -112,7 +107,7 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
         if (response.statusCode() == 429) throw ProviderRateLimited()
         throw ProviderUnavailable()
     }
-    json.parseToJsonElement(response.body()).jsonObject["choices"]!!.jsonArray
+    return json.parseToJsonElement(response.body()).jsonObject["choices"]!!.jsonArray
         .first().jsonObject["message"]!!.jsonObject["content"]?.jsonPrimitive?.content
         ?.trim()?.take(4000)?.takeIf { it.isNotEmpty() } ?: throw ProviderUnavailable()
 }
@@ -125,6 +120,7 @@ internal data class ChatDependencies(
     val ready: (ServerConfig) -> Boolean = ::chatReady,
     val verifyUid: suspend (String, ServerConfig) -> String = ::verifiedUid,
     val reply: suspend (ChatRequest, ServerConfig) -> String = ::groqReply,
+    val safetyCheck: suspend (ChatRequest, ServerConfig) -> Boolean = ::groqSafetyCheck,
     val rateLimiter: (ServerConfig) -> RateLimiter = { config ->
         if (config.production) FirestoreRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
         else LocalRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
@@ -206,10 +202,16 @@ internal fun Application.module(
             }
             if (!allowed) return@post call.respond(HttpStatusCode.TooManyRequests)
 
-            val latestText = req.messages.last().content
-            // This emergency keyword check is deliberately conservative and INCOMPLETE.
-            // Do not deploy publicly until expert-reviewed crisis handling has replaced it.
-            if (mayNeedImmediateHelp(latestText)) {
+            // Phrase check first, then the safety classifier over recent messages. Both are INCOMPLETE:
+            // do not deploy publicly until expert-reviewed crisis handling has replaced them.
+            val flagged = mayNeedImmediateHelp(req.messages.last().content) || try {
+                dependencies.safetyCheck(req, config)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                false
+            }
+            if (flagged) {
                 return@post call.respondText(json.encodeToString(ChatResponse(
                     reply = "I'm concerned about your safety. If you might act on these feelings, please contact emergency services or someone you trust right now. In India, call 112 for emergencies or Tele-MANAS at 14416 for support. Are you somewhere safe?",
                     safetyState = "CRISIS_SUPPORT"

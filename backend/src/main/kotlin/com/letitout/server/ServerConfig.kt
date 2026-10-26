@@ -11,9 +11,13 @@ internal data class ServerConfig(
     val simliBackgroundIds: Map<String, String>,
     val port: Int,
     val perUserHourlyLimit: Int,
-    val globalHourlyLimit: Int
+    val globalHourlyLimit: Int,
+    /** Groq-hosted safety classifier; null when GROQ_SAFETY_MODEL=off. */
+    val groqSafetyModel: String? = DEFAULT_SAFETY_MODEL
 ) {
     companion object {
+        const val DEFAULT_SAFETY_MODEL = "openai/gpt-oss-20b"
+
         fun fromEnvironment(env: Map<String, String> = System.getenv()): ServerConfig {
             fun integer(name: String, default: Int): Int = env[name]?.let {
                 requireNotNull(it.toIntOrNull()) { "$name must be an integer" }
@@ -34,6 +38,7 @@ internal data class ServerConfig(
             val projectId = env["FIREBASE_PROJECT_ID"]?.trim()?.takeIf { it.isNotEmpty() }
             val apiKey = env["GROQ_API_KEY"]?.trim()?.takeIf { it.isNotEmpty() }
             val model = env["GROQ_MODEL"]?.trim()?.takeIf { it.isNotEmpty() } ?: "openai/gpt-oss-120b"
+            val safetyModel = env["GROQ_SAFETY_MODEL"]?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_SAFETY_MODEL
             val simliApiKey = env["SIMLI_API_KEY"]?.trim()?.takeIf { it.isNotEmpty() }
             val simliFaceId = (env["SIMLI_FACE_ID_PILOT"] ?: env["SIMLI_FACE_ID_WOMAN_ADULT"])
                 ?.trim()?.takeIf { it.isNotEmpty() }
@@ -45,7 +50,8 @@ internal data class ServerConfig(
                 require(projectId != null) { "FIREBASE_PROJECT_ID is required in production" }
                 if (chatEnabled) require(apiKey != null) { "GROQ_API_KEY is required when production chat is enabled" }
             }
-            return ServerConfig(production, chatEnabled, projectId, apiKey, model, simliApiKey, simliFaceId, simliBackgroundIds, port, perUserLimit, globalLimit)
+            return ServerConfig(production, chatEnabled, projectId, apiKey, model, simliApiKey, simliFaceId, simliBackgroundIds, port, perUserLimit, globalLimit,
+                safetyModel.takeUnless { it.equals("off", ignoreCase = true) })
         }
     }
 }

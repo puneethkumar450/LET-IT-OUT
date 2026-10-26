@@ -17,7 +17,7 @@ Legend: ✅ implemented in source (verification noted separately) · 🔧 incomp
 - ✅ Local backend health/readiness/auth rejection checks and HTTP route tests
 - 🔧 Fresh Google sign-in, account collision handling, and complete auth flow on a physical device
 - 🔧 Voice recognition and read-aloud behavior across devices
-- 🔧 Broader safe/unsafe fictional conversation testing with Groq; prototype keyword routing is not a validated safety system
+- 🔧 Broader safe/unsafe fictional conversation testing with Groq; phrase check plus model classifier passed a 13-message spot check, but is not a validated safety system
 - 🔧 Improve user experience, onboarding retention, accessibility and dark mode
 - ✅ Android repository HTTP contract tests and emulator tests for preference reset and Ari setup
 - ✅ ViewModel emulator tests for stale-reply cancellation and retry/edit behavior
