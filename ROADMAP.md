@@ -4,8 +4,8 @@ Legend: ✅ implemented in source (verification noted separately) · 🔧 incomp
 
 ## v0.1.0 — Android developer MVP
 
-- ✅ Native Compose/M3 screens: welcome, auth, home, mood, chat, settings, privacy/help
-- ✅ Dynamic mood-colour selection and DataStore persistence
+- ✅ Native Compose/M3 screens: Ari welcome, auth, live chat, chat summary, settings, privacy/help
+- ✅ Single Ari portrait across static screens; legacy mood data remains for API compatibility
 - ✅ Firebase Google and guest auth source integration (requires project credentials)
 - ✅ Ktor + Groq API request path source integration, verification of Firebase ID tokens
 - ✅ Simple user-editable STT transcripts + opt-in TTS playback

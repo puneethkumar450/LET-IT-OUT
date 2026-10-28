@@ -1,0 +1,8 @@
+feature,area,priority,original,clone,notes
+Keep listening when risk is flagged: helpline card beside Ari's reply; no repeated script; never end the chat,safety,must,no,no,Backend replaces reply with one fixed crisis message on flag or classifier error (Main.kt). Needs clinical review. Evidence: fixes.md theme 4
+Reflect before advising: specific mirroring; no stock coping tips; no sycophancy; eval set,conversation,must,no,partial,Prompt exists; no eval for generic or sycophantic replies. Evidence: themes 5 and 8
+Honest free tier: allowance shown upfront; never cut off mid-conversation or during a flagged chat; monthly plan,pricing,should,no,no,Cost Simli minutes first; pricing via /replica-launch. Evidence: themes 1 and 2 (77+53 reviews)
+Opt-in on-device summary to pick up where we left off (view/edit/delete),conversation,should,no,no,Chat is in-memory only today by design. ROADMAP lists opt-in personalisation. Evidence: theme 3
+Store and website show the real streamed Ari face lip-syncing,launch,should,no,partial,Live face moves and lip-syncs; static PNG can differ from streamed face. Evidence: theme 7
+Versioned Ari persona; changes announced in-app before shipping,conversation,could,no,no,Evidence: theme 6 (Replika 2.0 complaints)
+Privacy you can see: app lock; one-tap forget conversation; plain what-leaves-your-phone screen,privacy,could,no,partial,Guest sign-in exists; chat not stored. No app lock. Thin evidence

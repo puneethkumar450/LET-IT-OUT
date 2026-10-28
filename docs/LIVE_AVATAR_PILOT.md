@@ -1,6 +1,6 @@
 # Talking avatar pilot
 
-In debug builds, signed-in chat opens the full-screen Simli avatar by default. First-time setup, sign-in, splash, the chat summary, and the live connection placeholder all use the same AI-generated Ari portrait. There is no gender or portrait selection. Spoken AI replies are sent as audio to Simli for lip sync; a short disclosure appears in setup and the details are in Privacy & Help. The still and Android voice remain available if the service is unavailable. Support-resource replies stay on the regular voice path.
+In debug builds, Start talking on the Ari welcome screen opens the full-screen Simli avatar for signed-in users. First-time setup, the welcome screen, sign-in, splash, the chat summary, and the live connection placeholder all use the same AI-generated Ari portrait. There is no gender, age, mood, or portrait picker in the current Android flow. Spoken AI replies are sent as audio to Simli for lip sync; a short disclosure appears in setup and the details are in Privacy & Help. The still and Android voice remain available if the service is unavailable. Support-resource replies stay on the regular voice path.
 
 ## Set up the avatar
 
@@ -26,7 +26,9 @@ In debug builds, signed-in chat opens the full-screen Simli avatar by default. F
    ./gradlew :app:assembleDebug
    ```
 
-4. During first-time setup, meet Ari and sign in or continue as a guest. Open chat; the live avatar starts automatically. Tap Back to read the chat summary, then use **More options → Return to live avatar** to reopen it. Without an authenticated or guest session, chat stays in preview mode.
+4. During first-time setup, meet Ari and sign in or continue as a guest. The Ari welcome screen shows **Start talking**; tapping it opens chat and starts live video for signed-in users. Tap Back to read the chat summary, then use **More options → Return to live avatar** to reopen it. The welcome screen also offers **Read chat summary** when this process has messages. Without an authenticated or guest session, chat stays in preview mode.
+
+The welcome screen uses lifecycle-aware coroutines to fetch a Firebase ID token and warm the backend `/health` connection, initialize Android TTS, and load the local avatar JavaScript in a reusable WebView. This does not request a Simli token or start streaming; those happen after Start talking. The effect on device startup time has not yet been measured.
 
 The backend checks Firebase authentication, limits avatar sessions to three starts per user and 60 globally per hour, and mints a [Simli session token](https://docs.simli.com/api-reference/compose-session-token). It never returns the Simli API key. Sessions are capped at five minutes and close after two idle minutes. These are pilot cost controls; review them before a public rollout.
 
@@ -52,7 +54,7 @@ The Ari page on let-it-go.in plays `web/dist/characters/ari-hello.mp4`: Ari's re
 To re-record it after changing the voice or script:
 
 1. Put the new voice in place with `web/scripts/make-greeting.sh path/to/recording.wav`.
-2. Run `python3 web/scripts/record-hello.py` and open `http://localhost:4174/` in Chrome. It reads the Simli key and face from `backend/.env`, mints one 60-second session, and records Ari while she speaks.
+2. Run `python3 web/scripts/record-hello.py` and open the `http://localhost:4174/#…` link it prints in Chrome (the part after `#` is a per-run token; the server rejects requests without it). It reads the Simli key and face from `backend/.env`, mints one 60-second session, and records Ari while she speaks.
 3. Click **Record hello**. When Ari finishes, the page uploads the recording and the script writes the MP4 with ffmpeg.
 
 The recorder's Simli client is `avatar-bridge/src/web.js`; rebuild it with `cd avatar-bridge && npm run build:web`.

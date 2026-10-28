@@ -82,7 +82,7 @@ class ChatRouteTest {
         assertEquals(1, providerCalls)
     }
 
-    @Test fun classifierFlagOpensCrisisSupportAndClassifierFailureFallsBackToReply() = testApplication {
+    @Test fun classifierFlagAndClassifierFailureBothOpenCrisisSupport() = testApplication {
         var providerCalls = 0
         application {
             module(config, ChatDependencies(
@@ -113,7 +113,15 @@ class ChatRouteTest {
             setBody(message("my phone is broken"))
         }
         assertEquals(HttpStatusCode.OK, classifierDown.status)
-        assertTrue(classifierDown.bodyAsText().contains("NORMAL"))
+        assertTrue(classifierDown.bodyAsText().contains("CRISIS_SUPPORT"))
+        assertEquals(0, providerCalls)
+
+        val noRisk = client.post("/v1/chat") {
+            header(HttpHeaders.Authorization, "Bearer valid")
+            contentType(ContentType.Application.Json)
+            setBody(message("work was long today"))
+        }
+        assertTrue(noRisk.bodyAsText().contains("NORMAL"))
         assertEquals(1, providerCalls)
     }
 

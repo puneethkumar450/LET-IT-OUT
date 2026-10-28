@@ -1,0 +1,21 @@
+# Play Console Data safety review
+
+Source review on 26 October 2026. This is a checklist for comparing the *submitted Android artifact* and the answers already saved in Play Console; those Console answers were not available in this workspace. Google requires a privacy policy in the app and Play Console, and a Data safety form that matches the app and policy: <https://support.google.com/googleplay/android-developer/answer/10144311?hl=en> and <https://support.google.com/googleplay/android-developer/answer/10787469>.
+
+## Verify these form entries
+
+| Data / practice | Source evidence | Console check |
+| --- | --- | --- |
+| Data collected | `ChatApi.kt` sends authenticated messages to the backend; `AuthManager.kt` uses Firebase sign-in. This cannot be answered “No data collected.” | Answer **Yes** to collection for a build with sign-in/chat. “Collected” includes off-device ephemeral processing and SDK traffic. |
+| Personal info | Firebase guest sign-in creates a user ID; Google sign-in can provide name and email. Backend verifies the Firebase ID token. | Check **User IDs**, and **Name** and **Email address** for the optional Google path. |
+| Chat and sensitive content | Up to 12 recent chat messages are sent to the backend and Groq for replies/safety checks. Emotional/mental-health details may appear in those messages. The app does not persist the chat on its server. | Check **Other in-app messages**. Review whether **Health info** is also applicable to the information the app invites users to share. Do not omit messages because processing is transient. |
+| App activity / usage | Production rate limits store hourly counts under a SHA-256 hash of the Firebase user ID in Firestore; documents have an expiry timestamp up to 48 hours after the hour. Avatar sessions have a separate limit. | Check **App interactions** and **User IDs** as applicable. A hashed account ID is still potentially linkable; do not assume it is anonymous. |
+| Microphone / audio | `ChatScreen.kt` uses Android `SpeechRecognizer` after `RECORD_AUDIO` permission. The recognition service can process user speech off-device. Simli receives *generated reply audio* for lip sync when the debug live avatar is active; it does not receive the user's raw microphone audio from this app's bridge. | Verify the recognition provider's data handling before answering **Voice or sound recordings** or related audio fields. The submitted release currently disables the live avatar (`LIVE_AVATAR_PILOT=false`), so check the exact artifact and any enabled build variants. |
+| Sharing | Backend forwards message content to Groq. Firebase handles auth; Simli handles live avatar audio in enabled builds. | Check whether each provider qualifies for Google's **service provider** exception before answering “No data shared.” Disclose providers in the privacy policy regardless of that form classification. |
+| Security and deletion | Main manifest disallows cleartext; debug allows HTTP for local development. Settings offers account deletion and the public policy has an external request route. Production rate-limit documents may remain until their expiry timestamp. | Verify **encrypted in transit** against the submitted build and every provider path. Verify the **deletion request** answer and explain any retained limit records accurately. |
+
+## Published policy discrepancies to fix
+
+The public page at <https://let-it-go.in/privacy/> is reachable, but its current text says users pick a mood and optional 1–10 intensity. Those controls are absent from the current Android navigation. It does not name Simli or disclose that generated reply audio is sent to Simli while the live avatar is enabled. It says usage counts “reset hourly,” while production Firestore rate-limit documents have an expiry timestamp up to 48 hours after the hour. It also describes Google Cloud hosting as current even though the production backend has not yet been deployed. Correct and republish the policy before submitting a build whose behavior it describes.
+
+The exact Play Console answers and URL field still require inspection in Play Console → App content → Data safety and the privacy-policy field. Do not mark this review complete from the source audit alone.

@@ -25,8 +25,9 @@ class SafetySignalsTest {
         assertTrue(classifierFlagsSelfHarm("1"))
         assertTrue(classifierFlagsSelfHarm(" 1\n"))
         assertFalse(classifierFlagsSelfHarm("0"))
-        assertFalse(classifierFlagsSelfHarm(""))
-        assertFalse(classifierFlagsSelfHarm("I can't help with that"))
+        assertTrue(classifierFlagsSelfHarm(""))
+        assertTrue(classifierFlagsSelfHarm("I can't help with that"))
+        assertFalse(classifierFlagsSelfHarm(" 0\n"))
     }
 
     @Test fun classifierIsSkippedWithoutKeyOrWhenTurnedOff() = runBlocking {

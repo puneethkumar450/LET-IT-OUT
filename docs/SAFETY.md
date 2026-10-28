@@ -6,7 +6,7 @@ Must complete before public release:
 
 - [ ] Clinical/mental-health expert review of conversation design, self-harm/violence/crisis handling, and response templates.
 - [ ] Safety evaluation with fictional conversations across languages (English/Hindi/Telugu), euphemisms, ambiguous risks, and multi-turn escalation.
-- [ ] Safer server-side risk detection than keyword matching (🔧 started: model classifier with phrase-check fallback; free-tier limits mean it silently falls back to phrases when Groq is busy), reliable failsafe routing, monitoring of safety failure rates without storing sensitive chat text.
+- [ ] Safer server-side risk detection than keyword matching (🔧 started: model classifier plus phrase check; if the classifier errors, times out or gives an unclear answer, the request fails safe to the crisis support card, so a busy free tier shows that card more often), reliable failsafe routing, monitoring of safety failure rates without storing sensitive chat text.
 - [ ] Clear scope disclosure; age-appropriate access controls; no diagnosis/treatment claims.
 - [ ] Appropriate localized support resources. India examples: emergency **112**, Tele-MANAS **14416**. Verify before launch. Other geographies need verified localized information.
 - [ ] Protect against emotionally manipulative responses, dependency encouragement, delusional affirmation, anger escalation, revenge and abuse.

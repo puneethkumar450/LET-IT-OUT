@@ -1,6 +1,6 @@
 # LET IT GO
 
-**A mood-aware Android AI listening companion (v0.1.0 developer starter).**
+**An Android AI listening companion (v0.1.0 developer starter).**
 
 > **Status: developer starter, not a public release.** Android debug/release builds and backend tests pass locally. Guest sign-in and real AI chat replies have worked on an emulator. Voice recognition, physical-device behavior, production infrastructure, and independent safety review still need verification before real users are invited.
 
@@ -8,12 +8,14 @@
 **Display name:** `LET IT GO`
 **Intended repository:** https://github.com/puneethkumar450/LET-IT-OUT.git
 
+For the current implementation map and verification state, see [project memory](docs/PROJECT_MEMORY.md).
+
 The app display name and website brand are LET IT GO. The existing Android application ID, Firebase project, backend artifact names, and Git repository URL retain their original identifiers so existing integrations remain connected.
 
 ## What has been implemented in source
 
-- Native Jetpack Compose splash, four-page onboarding, Ari setup, Google/guest/preview sign-in, seven-mood home screen with expressive emoji stickers, mood check-in with an optional intensity rating, AI chat summary, talking avatar pilot, settings and Privacy & Help screen, with Android Back navigation.
-- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts), custom line icons, and per-mood colour themes that can be switched off in Settings. Mood, speech and theme settings persist through DataStore. A single generated Ari portrait is shared across the static companion views.
+- Native Jetpack Compose splash, four-page onboarding, Ari setup, Google/guest/preview sign-in, full-screen Ari welcome screen, AI chat summary, talking avatar pilot, settings and Privacy & Help screen, with Android Back navigation.
+- Lavender Material 3 theme (Fredoka headings, Nunito body via Google Fonts) and custom line icons. Speech settings persist through DataStore; legacy mood data remains for compatibility. A single generated Ari portrait is shared across the static companion views.
 - Firebase Credential Manager Google sign-in and Firebase anonymous sign-in, connected to the development Firebase project `let-it-out-d661a` through the ignored `app/google-services.json`.
 - Ktor backend exposing `/health`, `/ready`, and authenticated `/v1/chat`, verifying Firebase ID tokens, forwarding trimmed conversation context to Groq, and limiting input and traffic. Production mode uses Firestore shared counters and starts with chat disabled.
 - Text conversation states (typing, retry or edit after a failed send, offline notice, new/end conversation), a crisis-support card with Tele-MANAS and 112 dial buttons when the backend flags a reply, native Android push-to-talk transcript capture, and read-aloud replies with a Stop control.
@@ -93,11 +95,11 @@ Response:
 
 ## 5. Existing limitations
 
-- Local verification on 25 October 2026: debug and release APK builds passed; three Android chat HTTP contract tests, four emulator tests (preference persistence/reset, accessible companion selection, and ViewModel cancellation/retry behavior), and backend route tests passed. The backend answered `/health` and `/ready` locally and rejected an unauthenticated chat request. This does not verify production hosting or safety.
+- Previous local debug/release builds, Android tests, and backend route tests passed. On 26 October 2026, the Android debug build and unit tests passed after the Ari welcome and warmup changes. The latest welcome and reused WebView still need an emulator or physical-device visual and live-session check. This does not verify production hosting or safety.
 - The debug build, anonymous guest sign-in, guest-to-Google linking, and real AI replies were verified on an emulator. Fresh Google sign-in, voice recognition, and physical-device behavior remain unverified.
 - After confirmed Firebase account deletion, the app clears in-memory conversation data and all local preferences. Deletion may still require recent Firebase reauthentication. For a production service, implement a complete user-data erasure policy wherever data is retained.
 - Guest-to-Google account upgrade is implemented using Firebase credential linking; it needs collision-handling tests.
-- Local chat remains only in ViewModel memory; changing mood intentionally clears it. Leaving the process also clears it. Not end-to-end encrypted.
+- Local chat remains only in ViewModel memory; leaving the process clears it. The old mood picker is no longer in the navigation flow. Chat is not end-to-end encrypted.
 - Prototype safety screening uses a few phrases and can miss many crisis situations. Do not release publicly until replaced/reviewed by appropriate experts.
 - Built-in Android TTS voice quality and STT languages vary by device. STT might send audio to the device's selected speech-service provider.
 - The debug build includes one Simli talking-avatar pilot. Its live video is provided by Simli and can differ slightly from the generated Ari portrait used on static screens; the pilot is disabled in release builds.

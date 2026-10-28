@@ -209,7 +209,7 @@ internal fun Application.module(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
-                false
+                true // Fail safe: an unchecked message gets crisis support, not an ordinary reply.
             }
             if (flagged) {
                 return@post call.respondText(json.encodeToString(ChatResponse(

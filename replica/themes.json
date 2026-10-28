@@ -1,0 +1,343 @@
+{
+ "_about": "Themes for AI listening/companion apps (Replika, Wysa), written for LET IT GO.",
+ "request_patterns": [
+  "\\bi wish\\b",
+  "\\bplease add\\b",
+  "\\bwould be (nice|great|good|helpful)\\b",
+  "\\bwould love\\b",
+  "\\bneeds? (a|an|the|to|more)\\b",
+  "\\bno way to\\b",
+  "\\bthere'?s no (way|option)\\b",
+  "\\b(can'?t|cannot|unable to) (even )?(add|change|edit|set|choose|export|import|customi[sz]e|connect|undo|delete|turn off)\\b",
+  "\\b(missing|lacks|lacking)\\b",
+  "\\bdoesn'?t (have|support|let|allow)\\b",
+  "\\bif only\\b",
+  "\\bfeature request\\b",
+  "\\bwhy (can'?t|isn'?t|doesn'?t)\\b",
+  "\\bplease (add|fix|consider)\\b",
+  "\\bwould (prefer|happily)\\b"
+ ],
+ "themes": [
+  {
+   "id": "paywall",
+   "label": "Free version is really a short trial; hard paywall mid-conversation",
+   "kind": "complaint",
+   "patterns": [
+    "\\bpay ?wall",
+    "\\bfree (version|tier|plan|membership|chat)\\b",
+    "\\bfree trial\\b",
+    "\\bnot free\\b",
+    "\\bno free\\b",
+    "\\b(have|has) to pay\\b",
+    "\\bpay to (chat|talk|win)\\b",
+    "\\bupgrade\\b",
+    "\\bsubscri(be|ption)\\b",
+    "\\bunless (i|you) (pay|upgrade)",
+    "\\bpremium\\b",
+    "\\b(pro|max|ultra|platinum)\\b"
+   ]
+  },
+  {
+   "id": "price",
+   "label": "Too expensive; yearly-only billing, no monthly plan",
+   "kind": "complaint",
+   "patterns": [
+    "\\bexpensive\\b",
+    "\\bprice\\b",
+    "\\bcost",
+    "\\bafford",
+    "\\b(yearly|annual(ly)?|a year up ?front|per year|a year)\\b",
+    "\\bmonthly\\b",
+    "\\$\\s?\\d+",
+    "\u00a3\\d+",
+    "\\bnot worth\\b",
+    "\\bmoney\\b"
+   ]
+  },
+  {
+   "id": "billing",
+   "label": "Billing, refunds, lifetime plans not honoured",
+   "kind": "complaint",
+   "patterns": [
+    "\\brefund",
+    "\\bcancel",
+    "\\bcharged\\b",
+    "\\bscam\\b",
+    "\\blifetime\\b",
+    "\\bfraud\\b",
+    "\\bmoney (was )?taken\\b",
+    "\\bisn'?t registering\\b",
+    "\\bwon'?t register\\b"
+   ]
+  },
+  {
+   "id": "memory",
+   "label": "Forgets context; can't continue a past conversation",
+   "kind": "complaint",
+   "patterns": [
+    "\\bmemor(y|ies)\\b",
+    "\\bremember",
+    "\\bforg[eo]t",
+    "\\bstart over\\b",
+    "\\bre-?explain\\b",
+    "\\bprevious chat",
+    "\\bcontinue (a |the )?(previous|old|past)",
+    "\\blog conversations\\b",
+    "\\bretain\\b",
+    "\\bdementia\\b",
+    "\\blost our\\b"
+   ]
+  },
+  {
+   "id": "scripted",
+   "label": "Scripted, repetitive, generic replies; feels like talking to yourself",
+   "kind": "complaint",
+   "patterns": [
+    "\\bscripted\\b",
+    "\\brepeat",
+    "\\brepetitive\\b",
+    "\\bgeneric\\b",
+    "\\bsame (paragraph|thing|questions?|subject)\\b",
+    "\\btalking to (yourself|myself)\\b",
+    "\\bmirror\\b",
+    "\\bsuperficial\\b",
+    "\\bvague\\b",
+    "\\bsurface level\\b",
+    "\\bboring\\b",
+    "\\blooping\\b",
+    "\\bwooden\\b",
+    "\\bthumbs up\\b",
+    "\\bslop\\b",
+    "\\bdeep breath\\b"
+   ]
+  },
+  {
+   "id": "not_heard",
+   "label": "Doesn't make me feel heard; no empathy",
+   "kind": "complaint",
+   "patterns": [
+    "\\bheard\\b",
+    "\\bunderstood\\b",
+    "\\bdoesn'?t (seem to )?care\\b",
+    "\\bempathy\\b",
+    "\\bvalidation\\b",
+    "\\blisten",
+    "\\bsomeone to talk to\\b",
+    "\\bvent\\b"
+   ]
+  },
+  {
+   "id": "crisis_overreach",
+   "label": "Ends or deflects the talk when you're struggling (crisis scripts, 'see a therapist')",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcrisis\\b",
+    "\\btherapist\\b",
+    "\\bsafety (scripts?|plan)\\b",
+    "\\bstops the conversation\\b",
+    "\\bquit the conversation\\b",
+    "\\bneed more help\\b",
+    "\\bnot a good fit\\b",
+    "\\bserious (mental health|symptoms|help)\\b",
+    "\\btough stuff\\b",
+    "\\bdeep problems\\b",
+    "\\bdangerous\\b",
+    "\\bhotline\\b",
+    "\\bforce an end\\b",
+    "\\bBye button\\b"
+   ]
+  },
+  {
+   "id": "tone",
+   "label": "Harsh, judging, sycophantic or manipulative tone",
+   "kind": "complaint",
+   "patterns": [
+    "\\bharsh\\b",
+    "\\bshame\\b",
+    "\\bjudg",
+    "\\bdictator\\b",
+    "\\borders\\b",
+    "\\brude\\b",
+    "\\babuse\\b",
+    "\\badversarial\\b",
+    "\\bsycophant",
+    "\\bbutter me up\\b",
+    "\\bmanipulat",
+    "\\bgaslight",
+    "\\bmean\\b",
+    "\\bbiase?d?\\b",
+    "\\bpushy\\b",
+    "\\boverbearing\\b"
+   ]
+  },
+  {
+   "id": "changes",
+   "label": "An update changed or 'killed' my companion",
+   "kind": "complaint",
+   "patterns": [
+    "\\b(new|latest|recent|last) (update|version|experience|model)\\b",
+    "\\bupdate\\b",
+    "\\b2\\.0\\b",
+    "\\bused to\\b",
+    "\\bkilled her\\b",
+    "\\bemotionless\\b",
+    "\\bno personality\\b",
+    "\\bruined\\b",
+    "\\bremoved\\b",
+    "\\bbring back\\b",
+    "\\bolder versions?\\b",
+    "\\bprevious version\\b"
+   ]
+  },
+  {
+   "id": "avatar",
+   "label": "Avatar looks creepy/cartoonish, doesn't move, doesn't match ads",
+   "kind": "complaint",
+   "patterns": [
+    "\\bavatar",
+    "\\bvisuals?\\b",
+    "\\bcreepy\\b",
+    "\\bclay\\b",
+    "\\bcartoon",
+    "\\bdoesn'?t (move|do anything)\\b",
+    "\\bdidn'?t move\\b",
+    "\\bmouth\\b",
+    "\\bface\\b",
+    "\\blooks like\\b",
+    "\\boutfits?\\b",
+    "\\bclothes\\b",
+    "\\bhair\\b",
+    "\\bscary\\b",
+    "\\bads\\b.*\\b(life ?like|advertis)",
+    "\\bfalse advertising\\b",
+    "\\bmatch(ing)? (that )?advertised\\b"
+   ]
+  },
+  {
+   "id": "voice",
+   "label": "Voice and calls: unnatural, failing, wrong accent",
+   "kind": "complaint",
+   "patterns": [
+    "\\bvoices?\\b",
+    "\\b(phone|voice|video) calls?\\b",
+    "\\bcall (option|not sent)\\b",
+    "\\baccent\\b",
+    "\\bsounds? (scripted|like)\\b"
+   ]
+  },
+  {
+   "id": "bugs",
+   "label": "Bugs and crashes",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcrash(es|ed|ing)?\\b",
+    "\\bbugs?\\b",
+    "\\bbuggy\\b",
+    "\\bglitch",
+    "\\bfreez(e|es|ing)\\b",
+    "\\bbroken\\b",
+    "\\b(doesn'?t|does not|stopped) work",
+    "\\bnot working\\b",
+    "\\berror\\b",
+    "\\bstuck\\b",
+    "\\bnetwork issue\\b",
+    "\\bdisconnect",
+    "\\bcan'?t connect\\b",
+    "\\blosing connection\\b"
+   ]
+  },
+  {
+   "id": "performance",
+   "label": "Slow, laggy, heavy",
+   "kind": "complaint",
+   "patterns": [
+    "\\bslow\\b",
+    "\\blag(gy|s)?\\b",
+    "\\bloading\\b",
+    "\\btakes forever\\b",
+    "\\bbattery\\b",
+    "\\bsluggish\\b",
+    "\\bheavy\\b"
+   ]
+  },
+  {
+   "id": "support",
+   "label": "Support that does not answer",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcustomer (service|support)\\b",
+    "\\bsupport\\b",
+    "\\bno (response|reply)\\b",
+    "\\bnever (replied|responded|heard back)\\b",
+    "\\bcontact(ing)? (them|luka)\\b",
+    "\\bcommunication\\b"
+   ]
+  },
+  {
+   "id": "account",
+   "label": "Login and account problems",
+   "kind": "complaint",
+   "patterns": [
+    "\\blog ?in\\b",
+    "\\bsign ?in\\b",
+    "\\bpassword\\b",
+    "\\blocked out\\b",
+    "\\bverification\\b",
+    "\\b2fa\\b",
+    "\\bdelete (my )?account\\b",
+    "\\bage (restriction|verification)\\b",
+    "\\bunder 18\\b",
+    "\\blocked out\\b",
+    "\\bnew phone\\b",
+    "\\bacross devices\\b"
+   ]
+  },
+  {
+   "id": "privacy",
+   "label": "Privacy and permissions",
+   "kind": "complaint",
+   "patterns": [
+    "\\bprivacy\\b",
+    "\\btracking\\b",
+    "\\bsell(s|ing)? (my )?data\\b",
+    "\\bpermissions?\\b",
+    "\\bcreepy\\b",
+    "\\bcollects\\b",
+    "\\bshared with\\b",
+    "\\bno logs\\b",
+    "\\bprivacy policy\\b",
+    "\\block the app\\b",
+    "\\bdoesn'?t ask me to log in\\b"
+   ]
+  },
+  {
+   "id": "censorship",
+   "label": "Over-strict content limits / adult content",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcensor",
+    "\\brestrict",
+    "\\badult\\b",
+    "\\bintimate\\b",
+    "\\bsexual\\b",
+    "\\broleplay\\b",
+    "\\bnsfw\\b"
+   ]
+  },
+  {
+   "id": "conversation_control",
+   "label": "Wants control: continue chats, edit, prompts optional, haptics, save",
+   "kind": "request",
+   "patterns": [
+    "\\bcan'?t (edit|save|send|type|respond|reply)\\b",
+    "\\bcannot (edit|converse)\\b",
+    "\\boption\\b",
+    "\\bsettings\\b",
+    "\\bsuggestion prompts\\b",
+    "\\bstore the discussions\\b",
+    "\\bhands-?free\\b",
+    "\\bdeleted? (a |the )?conversation\\b"
+   ]
+  }
+ ]
+}

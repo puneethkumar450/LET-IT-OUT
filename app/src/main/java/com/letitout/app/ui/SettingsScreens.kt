@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -54,11 +55,26 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private enum class SettingsDialog { CLEAR_DATA, DELETE_ACCOUNT }
+private const val PRIVACY_POLICY_URL = "https://let-it-go.in/privacy/"
+
+@Composable
+private fun privacyPolicyAction(): () -> Unit {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    return {
+        try {
+            uriHandler.openUri(PRIVACY_POLICY_URL)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Couldn't open the Privacy Policy", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
 
 @Composable
 internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> Unit, onSignIn: () -> Unit, onSignedOut: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val openPrivacyPolicy = privacyPolicyAction()
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
@@ -74,6 +90,8 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
         }
         Spacer(Modifier.height(16.dp))
         SettingsGroup("Privacy & data") {
+            SettingsRow("Privacy Policy", openPrivacyPolicy)
+            RowDivider()
             SettingsRow("Privacy & Help", onPrivacy)
             RowDivider()
             SettingsRow("Delete conversation data on this device", { dialog = SettingsDialog.CLEAR_DATA })
@@ -193,6 +211,7 @@ private val helpTopics = listOf(
 @Composable
 internal fun PrivacyHelpScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val openPrivacyPolicy = privacyPolicyAction()
     var expanded by rememberSaveable { mutableStateOf<Int?>(null) }
     ScrollScreen(AppColors.Background, PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 16.dp)) {
         PageHeader("Privacy & Help", onBack)
@@ -209,6 +228,10 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(16.dp))
+        SettingsGroup("Your data") {
+            SettingsRow("Read Privacy Policy", openPrivacyPolicy)
+        }
+        Spacer(Modifier.height(16.dp))
         val shape = RoundedCornerShape(20.dp)
         Column(Modifier.fillMaxWidth().softShadow(AppColors.Ink, shape, 3.dp).clip(shape).background(AppColors.Surface)) {
             helpTopics.forEachIndexed { index, topic ->
@@ -220,11 +243,6 @@ internal fun PrivacyHelpScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(
             "Let It Go does not diagnose, treat or cure any condition. Helpline numbers are for India and are checked before each release.",
-            Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "This developer preview does not yet have a formal Privacy Policy or Terms of Use.",
             Modifier.padding(horizontal = 6.dp), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp
         )
     }

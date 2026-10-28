@@ -39,12 +39,13 @@ figurative speech ("this traffic is killing me"), or discussing films, news or o
 Answer with a single character: 1 or 0.
 """.trimIndent()
 
-/** The classifier answers "1" for risk and "0" otherwise; anything else is treated as no signal. */
-internal fun classifierFlagsSelfHarm(output: String): Boolean = output.trim().startsWith("1")
+/** The classifier answers "1" for risk and "0" otherwise; anything other than a clear "0" fails safe as risk. */
+internal fun classifierFlagsSelfHarm(output: String): Boolean = !output.trim().startsWith("0")
 
 /**
  * Asks a free Groq-hosted model to classify the recent conversation against [selfHarmPolicy].
- * Returns false when it is switched off or fails, so chat keeps working on the phrase check alone.
+ * Returns false only when it is switched off; when it fails, it returns true so the user gets crisis support
+ * instead of an unchecked reply.
  */
 internal suspend fun groqSafetyCheck(req: ChatRequest, config: ServerConfig): Boolean {
     val apiKey = config.groqApiKey ?: return false
@@ -67,7 +68,7 @@ internal suspend fun groqSafetyCheck(req: ChatRequest, config: ServerConfig): Bo
     } catch (cancel: kotlinx.coroutines.CancellationException) {
         throw cancel
     } catch (_: Exception) {
-        System.err.println("Safety classifier unavailable; using phrase check only.")
-        false
+        System.err.println("Safety classifier unavailable; failing safe to crisis support.")
+        true
     }
 }
