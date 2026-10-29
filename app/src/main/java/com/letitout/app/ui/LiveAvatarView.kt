@@ -35,13 +35,29 @@ import androidx.webkit.WebViewAssetLoader
 import com.letitout.app.R
 import org.json.JSONObject
 
+/** Callbacks from the avatar page, delivered on the main thread to the view that is showing it. */
+internal interface LiveAvatarListener {
+    fun onFailure()
+    fun onSpeaking()
+    fun onSilent()
+    fun onFrame(encoded: String)
+}
+
 /** The WebView owns the single WebRTC stream. Only a short-lived token crosses into JavaScript. */
 internal class LiveAvatarController {
     private var view: WebView? = null
     private var loaded = false
     private var onLoaded: (() -> Unit)? = null
+    private val main = Handler(Looper.getMainLooper())
+    /** The visible session's callbacks; null while no live view is showing. */
+    @Volatile var listener: LiveAvatarListener? = null
 
-    /** Loads the bundled Simli client once while the welcome screen is idle. No session starts here. */
+    /**
+     * Loads the bundled Simli client once while the welcome screen is idle. No session starts here.
+     * The JavaScript interface must be attached before the page loads: WebView only exposes an
+     * interface added later after the next reload, and then the page could never report frames.
+     */
+    @SuppressLint("SetJavaScriptEnabled")
     fun preload(context: Context) {
         if (view != null) return
         val loader = WebViewAssetLoader.Builder()
@@ -55,6 +71,15 @@ internal class LiveAvatarController {
             settings.allowContentAccess = false
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            addJavascriptInterface(object {
+                @JavascriptInterface fun onFailure() { main.post { listener?.onFailure() } }
+                @JavascriptInterface fun onSpeaking() { main.post { listener?.onSpeaking() } }
+                @JavascriptInterface fun onSilent() { main.post { listener?.onSilent() } }
+                @JavascriptInterface fun onFrameDiagnostics(details: String) {
+                    if (com.letitout.app.BuildConfig.DEBUG) Log.d("LiveAvatar", details.take(120))
+                }
+                @JavascriptInterface fun onFrame(encoded: String) { listener?.onFrame(encoded) }
+            }, "AndroidAvatar")
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     loader.shouldInterceptRequest(request.url)
@@ -81,9 +106,11 @@ internal class LiveAvatarController {
         }
     }
 
-    fun whenLoaded(action: () -> Unit) {
-        onLoaded = action
-        if (loaded) action()
+    /** Starts a session once the page has loaded; [listener] must already be set for it. */
+    fun start(sessionToken: String) {
+        val active = view ?: return
+        onLoaded = { active.evaluateJavascript("window.avatarBridge?.start(${JSONObject.quote(sessionToken)})", null) }
+        if (loaded) onLoaded?.invoke()
     }
 
     fun sendAudio(pcm16: ByteArray) {
@@ -109,14 +136,15 @@ internal class LiveAvatarController {
 
     fun close() {
         onLoaded = null
+        listener = null
         view?.evaluateJavascript("window.avatarBridge?.stop()", null)
-        view?.removeJavascriptInterface("AndroidAvatar")
     }
 
     fun destroy() {
         close()
         view?.let { active ->
             (active.parent as? ViewGroup)?.removeView(active)
+            active.removeJavascriptInterface("AndroidAvatar")
             active.destroy()
         }
         view = null
@@ -124,7 +152,6 @@ internal class LiveAvatarController {
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun LiveAvatarView(
     sessionToken: String,
@@ -142,8 +169,30 @@ internal fun LiveAvatarView(
     val silent = rememberUpdatedState(onSilent)
     val frame = remember(sessionToken) { mutableStateOf<ImageBitmap?>(null) }
     val readyReported = remember(sessionToken) { mutableStateOf(false) }
-    val main = Handler(Looper.getMainLooper())
-    DisposableEffect(controller, sessionToken) { onDispose { controller.close() } }
+    val main = remember { Handler(Looper.getMainLooper()) }
+    DisposableEffect(controller, sessionToken) {
+        controller.listener = object : LiveAvatarListener {
+            override fun onFailure() = failure.value()
+            override fun onSpeaking() = speaking.value()
+            override fun onSilent() = silent.value()
+            // Called on the WebView's JavaScript thread: decode here, publish on the main thread.
+            override fun onFrame(encoded: String) {
+                if (encoded.length > 150_000) return
+                val bytes = try { Base64.decode(encoded, Base64.NO_WRAP) } catch (_: IllegalArgumentException) { return }
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
+                main.post {
+                    if (controller.listener !== this) return@post
+                    frame.value = bitmap.asImageBitmap()
+                    if (!readyReported.value) {
+                        readyReported.value = true
+                        ready.value()
+                    }
+                }
+            }
+        }
+        controller.start(sessionToken)
+        onDispose { controller.close() }
+    }
 
     Box(modifier.background(backgroundColor)) {
         if (frame.value == null) {
@@ -155,35 +204,7 @@ internal fun LiveAvatarView(
             )
         }
         AndroidView(
-            factory = { context ->
-                controller.acquire(context, backgroundColor).apply {
-                    addJavascriptInterface(object {
-                        @JavascriptInterface fun onReady() { main.post { ready.value() } }
-                        @JavascriptInterface fun onFailure() { main.post { failure.value() } }
-                        @JavascriptInterface fun onSpeaking() { main.post { speaking.value() } }
-                        @JavascriptInterface fun onSilent() { main.post { silent.value() } }
-                        @JavascriptInterface fun onFrameDiagnostics(details: String) {
-                            if (com.letitout.app.BuildConfig.DEBUG) Log.d("LiveAvatar", details.take(120))
-                        }
-                        @JavascriptInterface fun onFrame(encoded: String) {
-                            if (encoded.length > 150_000) return
-                            val bytes = try { Base64.decode(encoded, Base64.NO_WRAP) } catch (_: IllegalArgumentException) { return }
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
-                            main.post {
-                                frame.value = bitmap.asImageBitmap()
-                                if (!readyReported.value) {
-                                    readyReported.value = true
-                                    ready.value()
-                                }
-                            }
-                        }
-                    }, "AndroidAvatar")
-                    val active = this
-                    controller.whenLoaded {
-                        active.evaluateJavascript("window.avatarBridge?.start(${JSONObject.quote(sessionToken)})", null)
-                    }
-                }
-            },
+            factory = { context -> controller.acquire(context, backgroundColor) },
             modifier = Modifier.fillMaxSize()
         )
         frame.value?.let { bitmap ->

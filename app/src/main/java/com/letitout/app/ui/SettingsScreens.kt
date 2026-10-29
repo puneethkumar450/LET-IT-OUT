@@ -89,6 +89,10 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
             ToggleRow("Voice input (push to talk)", state.settings.voiceInput, vm::setVoiceInput)
         }
         Spacer(Modifier.height(16.dp))
+        SettingsGroup("Display") {
+            ToggleRow("Reduce motion", state.settings.reduceMotion, vm::setReduceMotion)
+        }
+        Spacer(Modifier.height(16.dp))
         SettingsGroup("Privacy & data") {
             SettingsRow("Privacy Policy", openPrivacyPolicy)
             RowDivider()
@@ -203,7 +207,7 @@ private val helpTopics = listOf(
     HelpTopic(AppIcons.Storage, Mood.STRESSED, "What we store", "Settings on your device — not\nconversations",
         "Your settings stay on this device. We don't save chat history on our server, and a conversation is cleared when you close the app."),
     HelpTopic(AppIcons.Trash, Mood.ANGRY, "Deleting your data", "Clear a chat or delete your account",
-        "Start a new conversation from the ⋯ menu in a chat, clear conversation data on this device in Settings, or delete your account and saved app preferences in Settings › Account."),
+        "Tap Let it go in a chat's ⋯ menu to clear that conversation from the app, clear conversation data on this device in Settings, or delete your account and saved app preferences in Settings › Account. Messages you already sent were processed by our server and the AI provider to write Ari's replies; our server doesn't store them, and the provider's own data rules apply."),
     HelpTopic(AppIcons.People, Mood.LONELY, "Finding human support", "Helplines, counsellors and when to reach\nout",
         "In India, call 112 in an emergency or Tele-MANAS on 14416 for free mental health support, any time. Elsewhere, contact your local emergency number or someone you trust.")
 )

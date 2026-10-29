@@ -152,6 +152,7 @@ object AppIcons {
         lineIcon(circle(9f, 8f, 3.5f), "M2.5 20a6.5 6.5 0 0 1 13 0M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2")
     }
     val Mail by lazy { lineIcon(rect(3f, 5f, 18f, 14f, 3f), "M3 8l9 6 9-6") }
+    val Share by lazy { lineIcon("M12 15V3M7 8l5-5 5 5", "M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7") }
 }
 
 val Mood.icon: ImageVector

@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -52,12 +53,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +86,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -94,6 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,7 +126,8 @@ internal fun ChatScreen(
     openLiveOnEntry: Boolean,
     onHome: () -> Unit,
     onHumanSupport: () -> Unit,
-    onSignIn: () -> Unit
+    onSignIn: () -> Unit,
+    onReleased: (hadSupport: Boolean) -> Unit
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -143,6 +149,9 @@ internal fun ChatScreen(
     var autoStartAttempted by rememberSaveable { mutableStateOf(false) }
     var liveOpenedAfter by remember { mutableStateOf(0L) }
     var lastAutoSpokenId by remember { mutableStateOf<Long?>(null) }
+    var confirmRelease by remember { mutableStateOf(false) }
+    // Held only in memory for the dissolve animation; the ViewModel is already cleared.
+    var releasing by remember { mutableStateOf<ReleasingChat?>(null) }
     val scope = rememberCoroutineScope()
     val main = remember { Handler(Looper.getMainLooper()) }
     val liveUtterance = remember { AtomicReference<LiveUtterance?>(null) }
@@ -183,7 +192,7 @@ internal fun ChatScreen(
                             tts.language = Locale.getDefault()
                             tts.speak(live.message.text, TextToSpeech.QUEUE_FLUSH, null, live.id)
                         } else if (liveUtterance.get() === live) liveController.finishAudio()
-                    } else if (currentSpeechId.compareAndSet(utteranceId, null)) speakingId = null
+                    } else if (currentSpeechId.clearIfCurrent(utteranceId)) speakingId = null
                 }
             }
             @Suppress("OVERRIDE_DEPRECATION")
@@ -192,14 +201,14 @@ internal fun ChatScreen(
                     liveUtterance.get()?.takeIf { it.id == utteranceId }?.let {
                         if (liveUtterance.compareAndSet(it, null)) it.file.delete()
                     }
-                    if (currentSpeechId.compareAndSet(utteranceId, null)) {
+                    if (currentSpeechId.clearIfCurrent(utteranceId)) {
                         speakingId = null
                         speechError = "Voice playback is unavailable right now."
                     }
                 }
             }
             override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                main.post { if (currentSpeechId.compareAndSet(utteranceId, null)) speakingId = null }
+                main.post { if (currentSpeechId.clearIfCurrent(utteranceId)) speakingId = null }
             }
         })
         onDispose {
@@ -227,6 +236,11 @@ internal fun ChatScreen(
         stopLive()
         vm.newConversation()
         onHome()
+    }
+    // With messages, ending a chat is the release ritual; an empty chat just closes.
+    val requestEnd: () -> Unit = {
+        menuOpen = false
+        if (state.messages.isEmpty()) endConversation() else confirmRelease = true
     }
     val startLive: () -> Unit = {
         val requestId = ++liveStartId
@@ -338,20 +352,41 @@ internal fun ChatScreen(
         }
     }
     val itemCount = 2 + state.messages.size + (if (state.loading) 1 else 0) + (if (state.error != null) 1 else 0)
-    LaunchedEffect(itemCount) { listState.animateScrollToItem(itemCount - 1) }
+    // Scroll to the bottom of the last item, also when its footer appears after a reply is spoken.
+    val lastFooterSpeaking = speakingId != null && speakingId == state.messages.lastOrNull()?.id
+    LaunchedEffect(itemCount, lastFooterSpeaking) { listState.animateScrollToItem(itemCount - 1, Int.MAX_VALUE) }
+    // The list shrinks as the keyboard slides up; follow it so the newest message stays in view.
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom) { if (imeBottom > 0) listState.scrollToItem(itemCount - 1, Int.MAX_VALUE) }
     BackHandler { if (liveRequested) stopLive() else onHome() }
 
     val supportMode = state.supportMode
     LaunchedEffect(supportMode) { if (supportMode && liveRequested) stopLive() }
+    val autoStartLive = openLiveOnEntry && BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode && !autoStartAttempted
     LaunchedEffect(state.signedIn, supportMode) {
-        if (openLiveOnEntry && BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode && !autoStartAttempted) {
+        if (autoStartLive) {
             autoStartAttempted = true
             startLive()
         }
     }
+    // Draw the live layout from the first frame when it is about to start, so the text chat doesn't flash.
+    val showLive = liveRequested || autoStartLive
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
+    val startRelease: () -> Unit = {
+        confirmRelease = false
+        val messages = state.messages
+        if (isListening) { recognizer?.stopListening(); isListening = false }
+        stopLive()
+        input = ""
+        focusManager.clearFocus()
+        keyboard?.hide()
+        val hadSupport = vm.releaseConversation()
+        releasing = ReleasingChat(messages, palette, hadSupport)
+    }
+    BackHandler(enabled = releasing != null) { /* Let the short animation finish. */ }
+    val reduceMotion = rememberReduceMotion(state.settings.reduceMotion)
     Box(Modifier.fillMaxSize().background(palette.surface)) {
-        if (liveRequested) {
+        if (showLive) {
             Box(Modifier.fillMaxSize().background(palette.surface)) {
                 Image(
                     painter = painterResource(R.drawable.ari_onboarding_fullscreen),
@@ -387,7 +422,7 @@ internal fun ChatScreen(
                             liveUtterance.get()?.takeIf { it.videoStarted }?.let {
                                 if (liveUtterance.compareAndSet(it, null)) {
                                     it.file.delete()
-                                    if (currentSpeechId.compareAndSet(it.id, null)) speakingId = null
+                                    if (currentSpeechId.clearIfCurrent(it.id)) speakingId = null
                                 }
                             }
                         }
@@ -403,10 +438,11 @@ internal fun ChatScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SquareIconButton(AppIcons.Back, "View chat summary", stopLive, shadowColor = palette.accent)
-                        ChipButton("End chat", endConversation, AppColors.Surface, AppColors.Danger)
+                        ChipButton("Show chat", stopLive, AppColors.Surface, AppColors.Ink, icon = AppIcons.Chat, iconTint = palette.accent)
+                        ChipButton(if (state.messages.isEmpty()) "End chat" else "Let it go", requestEnd, AppColors.Surface, AppColors.Danger)
                     }
                     Spacer(Modifier.weight(1f))
+                    LiveCaption(state.messages, state.loading, palette.accent)
                     if (!liveReady) StatusPill("Connecting avatar…", palette.accent)
                     if (!online) StatusPill("No internet connection", AppColors.Warning)
                     speechError?.let { StatusPill(it, AppColors.Danger) }
@@ -477,7 +513,10 @@ internal fun ChatScreen(
                             )
                             HorizontalDivider(color = palette.accent.copy(alpha = .12f))
                             DropdownMenuItem(text = { Text("New conversation") }, onClick = { menuOpen = false; stopLive(); vm.newConversation() })
-                            DropdownMenuItem(text = { Text("End conversation") }, onClick = endConversation)
+                            DropdownMenuItem(
+                                text = { Text(if (state.messages.isEmpty()) "End conversation" else "Let it go") },
+                                onClick = requestEnd
+                            )
                         }
                     }
                 }
@@ -545,8 +584,38 @@ internal fun ChatScreen(
                 )
             }
         }
+        releasing?.let { release ->
+            ReleaseAnimation(
+                messages = release.messages, palette = release.palette, reduceMotion = reduceMotion,
+                modifier = Modifier.zIndex(10f),
+                onFinished = { onReleased(release.hadSupport) }
+            )
+        }
+    }
+    if (confirmRelease) {
+        AlertDialog(
+            onDismissRequest = { confirmRelease = false },
+            title = { Text("Ready to let this go?") },
+            text = { Text("This clears the conversation from the app. You won't be able to get it back.") },
+            confirmButton = { TextButton(onClick = startRelease) { Text("Let it go", color = palette.accent) } },
+            dismissButton = { TextButton(onClick = { confirmRelease = false }) { Text("Not yet") } }
+        )
     }
 }
+
+/**
+ * Clears the current utterance ID if it matches [id] by value. `compareAndSet` alone compares by
+ * reference, and the TTS engine reports IDs as new String objects, so it would never match.
+ */
+internal fun AtomicReference<String?>.clearIfCurrent(id: String?): Boolean {
+    while (true) {
+        val current = get() ?: return false
+        if (current != id) return false
+        if (compareAndSet(current, null)) return true
+    }
+}
+
+private class ReleasingChat(val messages: List<ChatMessage>, val palette: MoodPalette, val hadSupport: Boolean)
 
 private class LiveUtterance(val message: ChatMessage, val file: File, val id: String) {
     @Volatile var resampler: Pcm16Resampler? = null
@@ -644,6 +713,24 @@ private fun ListenFooter(background: Color, accent: Color, onSpeak: () -> Unit) 
         ) {
             Icon(AppIcons.Speaker, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
             Text("Listen", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** The latest exchange as captions over the live video, so the conversation stays readable. */
+@Composable
+private fun LiveCaption(messages: List<ChatMessage>, loading: Boolean, accent: Color) {
+    val lastUser = messages.lastOrNull { it.fromUser } ?: return
+    val reply = messages.last().takeUnless { it.fromUser }
+    Column(
+        Modifier.fillMaxWidth().background(AppColors.Surface.copy(alpha = .92f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text("You: ${lastUser.text}", color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        when {
+            loading -> TypingDots(accent)
+            reply != null -> Text(reply.text, color = AppColors.Ink, fontSize = 16.sp, lineHeight = 23.sp, maxLines = 5, overflow = TextOverflow.Ellipsis)
         }
     }
 }

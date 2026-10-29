@@ -36,6 +36,7 @@ import com.letitout.app.ui.HomeScreen
 import com.letitout.app.ui.LiveAvatarController
 import com.letitout.app.ui.OnboardingScreen
 import com.letitout.app.ui.PrivacyHelpScreen
+import com.letitout.app.ui.ReleaseRitualScreen
 import com.letitout.app.ui.SettingsScreen
 import com.letitout.app.ui.SignInScreen
 import com.letitout.app.ui.SplashScreen
@@ -81,6 +82,7 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
     DisposableEffect(liveController) { onDispose { liveController.destroy() } }
     var backStack by rememberSaveable { mutableStateOf(listOf("splash")) }
     var openLiveOnEntry by rememberSaveable { mutableStateOf(true) }
+    var releaseHadSupport by rememberSaveable { mutableStateOf(false) }
     val page = backStack.last()
     LaunchedEffect(page, state.signedIn, lifecycleOwner, speechRuntime) {
         if (page == "home") lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -137,7 +139,17 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                     openLiveOnEntry = openLiveOnEntry,
                     onHome = { popTo("home") },
                     onHumanSupport = { navigateTo("privacy") },
-                    onSignIn = { navigateTo("signin") }
+                    onSignIn = { navigateTo("signin") },
+                    onReleased = { hadSupport ->
+                        releaseHadSupport = hadSupport
+                        popTo("home")
+                        navigateTo("release")
+                    }
+                )
+                "release" -> ReleaseRitualScreen(
+                    hadSupport = releaseHadSupport,
+                    onTalkAgain = { openLiveOnEntry = true; popTo("home"); navigateTo("chat") },
+                    onHome = { popTo("home") }
                 )
                 "settings" -> SettingsScreen(
                     vm,

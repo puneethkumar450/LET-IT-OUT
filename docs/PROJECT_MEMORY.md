@@ -7,6 +7,7 @@ Updated 26 October 2026. This is a navigation aid for future work; check the cur
 - LET IT GO is an Android AI listening companion for adults 18+. The companion is Ari. It is a test build, not a therapist or crisis service.
 - First run: splash → four-page onboarding → full-screen Ari introduction → Google or guest sign-in → Ari welcome screen. Later launches return to the Ari welcome screen.
 - The welcome screen uses `app/src/main/res/drawable-nodpi/ari_onboarding_fullscreen.png`, the second generated Ari portrait. **Start talking** opens chat; signed-in debug builds request live Simli video. **Read chat summary** appears when this process has messages. Back from live video shows the text summary; Back from the summary returns home.
+- Ending a chat that has messages runs the release ritual: a confirmation, a dissolve animation over an in-memory copy of the last bubbles (the ViewModel is cleared first), then the `release` end screen. A conversation with a crisis-support reply ends on helplines with no share card. The optional share card is a fixed, content-free image written to the cache `share/` folder and shared through a `FileProvider`. See `docs/RELEASE_RITUAL_PLAN.md`.
 - The old mood grid, age/gender picker, and mood check-in are no longer in the navigation flow. `Mood` and related DataStore fields remain in source for backend compatibility and older data; avoid presenting them as current choices.
 - Static Ari imagery across Android comes from the same generated portrait. The actual moving face is streamed by Simli and can differ slightly. Do not imply that changing the local PNG changes the hosted live face.
 - `TEST_BUILD_NOTICE` in `app/src/main/java/com/letitout/app/data/Models.kt` appears on Home and in chat; keep it visible in test builds.
@@ -24,6 +25,9 @@ Updated 26 October 2026. This is a navigation aid for future work; check the cur
 - The Ktor service in `backend/` exposes `/health`, `/ready`, authenticated `/v1/chat`, authenticated `/v1/avatar/session`, and a restricted website hello endpoint. Local setup is in `backend/.env.example` and `docs/LIVE_AVATAR_PILOT.md`. Actual keys, Firebase files, keystores, and `local.properties` are ignored; never add their contents to memory or Git.
 - Production chat defaults to disabled. The debug Android live-avatar pilot is enabled by default; release builds disable it. See `docs/PRODUCTION_BACKEND.md`, `docs/SAFETY.md`, and `TODO.md` before any public rollout.
 - The website Ari preview is separate from Android chat. Its hello is a recorded MP4 (`web/dist/characters/ari-hello.mp4`), with no live visitor session, speech input, or AI chat. `web/` remains a separate Git repository.
+
+- The first public release ships text chat with voice; the live avatar stays a debug pilot. See `docs/FIRST_RELEASE_CHAT.md`.
+- Device check on a moto g45 (Android 15), 29 October 2026: live avatar connects and streams, captions and **Show chat** work, the chat follows the keyboard, "Speaking…" clears after speech, and the release ritual (reduced and full animation, share sheet, crisis end screen, empty chat) works. The avatar's live face differs visibly from the Ari still. Not yet checked: the live-mode **Let it go** chip, lip sync with sound on, TalkBack, a low-end phone.
 
 ## Known release blockers
 

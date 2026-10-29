@@ -7,5 +7,8 @@
         <activity
             android:name="com.letitout.app.ui.CompanionSetupHostActivity"
             android:exported="false" />
+        <activity
+            android:name="com.letitout.app.ui.ReleaseRitualHostActivity"
+            android:exported="false" />
     </application>
 </manifest>

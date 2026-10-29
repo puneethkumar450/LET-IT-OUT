@@ -18,7 +18,8 @@ data class AppSettings(
     val readAloud: Boolean = true,
     val voiceInput: Boolean = true,
     val followMoodTheme: Boolean = true,
-    val onboarded: Boolean = false
+    val onboarded: Boolean = false,
+    val reduceMotion: Boolean = false
 )
 
 @Singleton
@@ -28,6 +29,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     private val voiceInputKey = booleanPreferencesKey("voice_input")
     private val followMoodKey = booleanPreferencesKey("follow_mood_theme")
     private val onboardedKey = booleanPreferencesKey("onboarding_done")
+    private val reduceMotionKey = booleanPreferencesKey("reduce_motion")
 
     val mood: Flow<Mood> = context.dataStore.data.map { values ->
         Mood.entries.firstOrNull { it.name == values[moodKey] } ?: Mood.TALK
@@ -37,7 +39,8 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
             readAloud = values[readAloudKey] ?: true,
             voiceInput = values[voiceInputKey] ?: true,
             followMoodTheme = values[followMoodKey] ?: true,
-            onboarded = values[onboardedKey] ?: false
+            onboarded = values[onboardedKey] ?: false,
+            reduceMotion = values[reduceMotionKey] ?: false
         )
     }
 
@@ -55,6 +58,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     suspend fun setVoiceInput(enabled: Boolean) = set(voiceInputKey, enabled)
     suspend fun setFollowMoodTheme(enabled: Boolean) = set(followMoodKey, enabled)
     suspend fun setOnboarded() = set(onboardedKey, true)
+    suspend fun setReduceMotion(enabled: Boolean) = set(reduceMotionKey, enabled)
 
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         context.dataStore.edit { it[key] = value }

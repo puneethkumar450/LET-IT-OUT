@@ -87,6 +87,32 @@ class AppViewModelInstrumentedTest {
         assertFalse(viewModel.state.value.supportMode)
     }
 
+    @Test fun releaseClearsConversationAndReportsCrisisSupport() = withViewModel { viewModel, api ->
+        onMain { viewModel.send("A hard night") }
+        await { api.requests.size == 1 }
+        api.reply(0, "Support reply", safetyState = "CRISIS_SUPPORT")
+        await { viewModel.state.value.supportMode }
+
+        var hadSupport = false
+        onMain { hadSupport = viewModel.releaseConversation() }
+        assertTrue("A crisis conversation must be reported so helplines come first", hadSupport)
+        assertTrue(viewModel.state.value.messages.isEmpty())
+        assertFalse(viewModel.state.value.supportMode)
+    }
+
+    @Test fun lateReplyCannotReturnAfterRelease() = withViewModel { viewModel, api ->
+        onMain { viewModel.send("Something heavy") }
+        await { api.requests.size == 1 }
+        var hadSupport = true
+        onMain { hadSupport = viewModel.releaseConversation() }
+        assertFalse(hadSupport)
+
+        api.reply(0, "Late reply")
+        instrumentation.waitForIdleSync()
+        assertTrue("A released conversation must stay empty", viewModel.state.value.messages.isEmpty())
+        assertFalse(viewModel.state.value.loading)
+    }
+
     private inline fun withViewModel(block: (AppViewModel, HeldChatApi) -> Unit) {
         val targetContext = instrumentation.targetContext
         // Match the existing preference test's isolated path; neither test touches the app's store.
@@ -137,7 +163,8 @@ class AppViewModelInstrumentedTest {
         override suspend fun avatarSession(authorization: String, mood: String) =
             error("Live avatar is not used by this chat ViewModel test")
 
-        fun reply(index: Int, text: String) = continuations[index].resume(ChatResponse(text))
+        fun reply(index: Int, text: String, safetyState: String = "NORMAL") =
+            continuations[index].resume(ChatResponse(text, safetyState))
         fun fail(index: Int, error: Exception) = continuations[index].resumeWithException(error)
     }
 }

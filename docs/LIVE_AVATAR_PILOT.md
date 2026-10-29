@@ -26,7 +26,7 @@ In debug builds, Start talking on the Ari welcome screen opens the full-screen S
    ./gradlew :app:assembleDebug
    ```
 
-4. During first-time setup, meet Ari and sign in or continue as a guest. The Ari welcome screen shows **Start talking**; tapping it opens chat and starts live video for signed-in users. Tap Back to read the chat summary, then use **More options → Return to live avatar** to reopen it. The welcome screen also offers **Read chat summary** when this process has messages. Without an authenticated or guest session, chat stays in preview mode.
+4. During first-time setup, meet Ari and sign in or continue as a guest. The Ari welcome screen shows **Start talking**; tapping it opens chat and starts live video for signed-in users. Tap **Show chat** (or Back) to read the full conversation, then use **More options → Return to live avatar** to reopen it. The welcome screen also offers **Read chat summary** when this process has messages. Without an authenticated or guest session, chat stays in preview mode.
 
 The welcome screen uses lifecycle-aware coroutines to fetch a Firebase ID token and warm the backend `/health` connection, initialize Android TTS, and load the local avatar JavaScript in a reusable WebView. This does not request a Simli token or start streaming; those happen after Start talking. The effect on device startup time has not yet been measured.
 
@@ -34,11 +34,13 @@ The backend checks Firebase authentication, limits avatar sessions to three star
 
 ## How replies play
 
-The pilot opens a dedicated full-screen video view with no chat history. Type in the composer or tap the microphone; a completed voice transcript sends automatically. Spoken AI replies play automatically while the view is open. The back button returns to the regular chat summary; conversation messages remain available there.
+The pilot opens a full-screen video view. A caption card over the video shows your last message and Ari's latest reply; **Show chat** opens the full conversation. Type in the composer or tap the microphone; a completed voice transcript sends automatically. Spoken AI replies play automatically while the view is open. The back button also returns to the full conversation.
 
 Android TTS produces PCM audio chunks without playing them locally. The app converts those chunks to 16 kHz mono PCM16 and sends them through the bundled Simli WebRTC client. The token requests a portrait video stream with Simli's default camera framing and the background for the selected mood. The Android app displays decoded frames edge to edge, with the back button and composer over the video. Sending a new message or leaving the view clears both TTS and the avatar buffer. On a connection or rendering failure, the view returns to the regular chat with portrait and device voice.
 
 The JavaScript bridge source is in `avatar-bridge/`; its checked-in bundle is in `app/src/main/assets/live-avatar/bridge.js`. After changing the bridge, run `cd avatar-bridge && npm ci && npm run build`.
+
+The bridge's JavaScript interface (`AndroidAvatar`) is attached in `LiveAvatarController.preload()`, before the page loads. WebView only exposes an interface added after load on the next reload, so attaching it later leaves the page unable to report frames and the view stuck on "Connecting avatar…". Each live view sets `LiveAvatarController.listener` for its session.
 
 ## Pilot limits
 

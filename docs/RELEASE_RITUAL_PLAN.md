@@ -1,6 +1,8 @@
 # Release ritual plan
 
-Status: proposal, not built. Drafted 28 October 2026.
+Status: first version built on `feature/release-ritual`, 28 October 2026. The end screens and share card were checked on an emulator; the full chat-to-release animation still needs a check on a signed-in device. Measuring (below) is not built.
+
+Where it lives: `ui/ReleaseRitualScreen.kt` (animation, end screens, reduce-motion check), `ui/ShareCard.kt` (card and share sheet), `AppViewModel.releaseConversation()`, the `release` route in `MainActivity.kt`, and `res/xml/share_paths.xml`. An empty chat still shows **End conversation** and simply closes.
 
 ## The idea
 
