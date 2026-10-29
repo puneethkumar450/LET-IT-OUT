@@ -1,5 +1,8 @@
 package com.letitout.app.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
@@ -18,10 +21,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -71,13 +79,20 @@ private fun privacyPolicyAction(): () -> Unit {
 }
 
 @Composable
-internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () -> Unit, onSignIn: () -> Unit, onSignedOut: () -> Unit) {
+internal fun SettingsScreen(
+    vm: AppViewModel, speechRuntime: AriSpeechRuntime,
+    onBack: () -> Unit, onPrivacy: () -> Unit, onSignIn: () -> Unit, onSignedOut: () -> Unit
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val openPrivacyPolicy = privacyPolicyAction()
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
+    var choosingVoice by remember { mutableStateOf(false) }
+    val tts = remember(speechRuntime) { speechRuntime.prepare() }
+    val voiceOptions = remember(speechRuntime.ready, choosingVoice) { tts.ariVoiceOptions() }
+    val currentVoice = resolveAriVoice(voiceOptions, state.settings.ariVoice)
     ScrollScreen(AppColors.Background, PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 12.dp)) {
         PageHeader("Settings", onBack)
         Spacer(Modifier.height(16.dp))
@@ -87,6 +102,8 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
             ToggleRow("Read replies aloud", state.settings.readAloud, vm::setReadAloud)
             RowDivider()
             ToggleRow("Voice input (push to talk)", state.settings.voiceInput, vm::setVoiceInput)
+            RowDivider()
+            SettingsRow("Ari's voice", { choosingVoice = true }, value = currentVoice?.label?.substringBefore(" ·") ?: "Phone default")
         }
         Spacer(Modifier.height(16.dp))
         SettingsGroup("Display") {
@@ -120,6 +137,19 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
             LinkButton("About Let It Go", AppColors.Primary, onPrivacy)
             Text("Version ${BuildConfig.VERSION_NAME}", Modifier.padding(end = 6.dp), color = AppColors.Muted, fontSize = 13.sp)
         }
+    }
+    if (choosingVoice) {
+        AriVoiceDialog(
+            options = voiceOptions, selected = currentVoice?.name,
+            onSelect = { option ->
+                vm.setAriVoice(option.name)
+                runCatching { tts.voices.orEmpty().firstOrNull { it.name == option.name } }.getOrNull()?.let { tts.voice = it }
+                tts.setSpeechRate(ARI_SPEECH_RATE)
+                tts.speak(ARI_PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, "voice-preview")
+            },
+            onMoreVoices = { openTtsSettings(context) },
+            onDismiss = { tts.stop(); choosingVoice = false }
+        )
     }
     val close = { dialog = null }
     when (dialog) {
@@ -168,6 +198,53 @@ internal fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPrivacy: () 
             dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
         )
         null -> Unit
+    }
+}
+
+/** Lists Ari's on-device voices; tapping one saves it and plays a short preview. */
+@Composable
+private fun AriVoiceDialog(
+    options: List<VoiceOption>, selected: String?,
+    onSelect: (VoiceOption) -> Unit, onMoreVoices: () -> Unit, onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ari's voice") },
+        text = {
+            Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "These voices are installed on your phone and speak on the device. Tap one to hear it.",
+                    color = AppColors.Muted, fontSize = 13.sp, lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                if (options.isEmpty()) {
+                    Text("No on-device voices were found for your language. Tap More voices to download one.", fontSize = 14.sp, lineHeight = 20.sp)
+                }
+                options.forEach { option ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(selected = option.name == selected, role = Role.RadioButton) { onSelect(option) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        RadioButton(selected = option.name == selected, onClick = null)
+                        Text(option.label, Modifier.weight(1f), fontSize = 15.sp)
+                        Icon(AppIcons.Speaker, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = { TextButton(onClick = onMoreVoices) { Text("More voices") } }
+    )
+}
+
+/** Opens Android's text-to-speech settings, where people can download more voices. */
+private fun openTtsSettings(context: android.content.Context) {
+    try {
+        context.startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "Open Settings › Text-to-speech output to add voices.", Toast.LENGTH_LONG).show()
     }
 }
 

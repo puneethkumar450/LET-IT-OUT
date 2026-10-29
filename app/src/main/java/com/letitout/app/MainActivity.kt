@@ -153,6 +153,7 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                 )
                 "settings" -> SettingsScreen(
                     vm,
+                    speechRuntime = speechRuntime,
                     onBack = navigateBack,
                     onPrivacy = { navigateTo("privacy") },
                     onSignIn = { navigateTo("signin") },

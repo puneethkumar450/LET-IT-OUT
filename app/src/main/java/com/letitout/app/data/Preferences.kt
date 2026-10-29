@@ -19,7 +19,9 @@ data class AppSettings(
     val voiceInput: Boolean = true,
     val followMoodTheme: Boolean = true,
     val onboarded: Boolean = false,
-    val reduceMotion: Boolean = false
+    val reduceMotion: Boolean = false,
+    /** A TTS voice name; null uses Ari's default voice for this phone. */
+    val ariVoice: String? = null
 )
 
 @Singleton
@@ -30,6 +32,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     private val followMoodKey = booleanPreferencesKey("follow_mood_theme")
     private val onboardedKey = booleanPreferencesKey("onboarding_done")
     private val reduceMotionKey = booleanPreferencesKey("reduce_motion")
+    private val ariVoiceKey = stringPreferencesKey("ari_voice")
 
     val mood: Flow<Mood> = context.dataStore.data.map { values ->
         Mood.entries.firstOrNull { it.name == values[moodKey] } ?: Mood.TALK
@@ -40,7 +43,8 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
             voiceInput = values[voiceInputKey] ?: true,
             followMoodTheme = values[followMoodKey] ?: true,
             onboarded = values[onboardedKey] ?: false,
-            reduceMotion = values[reduceMotionKey] ?: false
+            reduceMotion = values[reduceMotionKey] ?: false,
+            ariVoice = values[ariVoiceKey]
         )
     }
 
@@ -59,6 +63,9 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     suspend fun setFollowMoodTheme(enabled: Boolean) = set(followMoodKey, enabled)
     suspend fun setOnboarded() = set(onboardedKey, true)
     suspend fun setReduceMotion(enabled: Boolean) = set(reduceMotionKey, enabled)
+    suspend fun setAriVoice(name: String) {
+        context.dataStore.edit { it[ariVoiceKey] = name }
+    }
 
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         context.dataStore.edit { it[key] = value }

@@ -131,6 +131,7 @@ class AppViewModel @Inject constructor(
     fun setVoiceInput(enabled: Boolean) { viewModelScope.launch { preferences.setVoiceInput(enabled) } }
     fun setFollowMoodTheme(enabled: Boolean) { viewModelScope.launch { preferences.setFollowMoodTheme(enabled) } }
     fun setReduceMotion(enabled: Boolean) { viewModelScope.launch { preferences.setReduceMotion(enabled) } }
+    fun setAriVoice(name: String) { viewModelScope.launch { preferences.setAriVoice(name) } }
     fun finishOnboarding() { viewModelScope.launch { preferences.setOnboarded() } }
 
     fun send(text: String) {

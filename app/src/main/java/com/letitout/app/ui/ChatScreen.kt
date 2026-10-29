@@ -189,7 +189,7 @@ internal fun ChatScreen(
                 main.post {
                     if (live != null) {
                         if ((live.resampler == null || !live.sentAudio) && liveUtterance.compareAndSet(live, null)) {
-                            tts.language = Locale.getDefault()
+                            tts.useAriVoice(state.settings.ariVoice)
                             tts.speak(live.message.text, TextToSpeech.QUEUE_FLUSH, null, live.id)
                         } else if (liveUtterance.get() === live) liveController.finishAudio()
                     } else if (currentSpeechId.clearIfCurrent(utteranceId)) speakingId = null
@@ -262,7 +262,7 @@ internal fun ChatScreen(
     val speakMessage: (ChatMessage) -> Unit = { message ->
         if (speechEnabled) {
             stopSpeaking()
-            tts.language = Locale.getDefault()
+            tts.useAriVoice(state.settings.ariVoice)
             val utteranceId = "${message.id}:${speechSerial.incrementAndGet()}"
             currentSpeechId.set(utteranceId)
             if (liveReady && !message.supportResources) {
