@@ -31,16 +31,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.letitout.app.R
+import com.letitout.app.data.Allowance
+import com.letitout.app.data.COMPANION_NAME
 import com.letitout.app.data.TEST_BUILD_NOTICE
+import androidx.compose.ui.semantics.contentDescription
 
 /** The single post-setup starting point. The live connection opens only after Start talking. */
 @Composable
 internal fun HomeScreen(
     hasSummary: Boolean,
+    allowance: Allowance?,
+    chatInProgress: Boolean,
+    showLive: Boolean,
     onStartTalking: () -> Unit,
+    onSeeLive: () -> Unit,
     onViewSummary: () -> Unit,
+    onDial: (String) -> Unit,
     onSettings: () -> Unit
 ) {
+    val usedUp = allowance != null && allowance.chatsLeft <= 0 && !chatInProgress
     Box(Modifier.fillMaxSize().background(Color(0xFF362844))) {
         Image(
             painter = painterResource(R.drawable.ari_onboarding_fullscreen),
@@ -79,24 +88,60 @@ internal fun HomeScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 Box(Modifier.size(9.dp).background(Color(0xFFBCEFE0), CircleShape))
                 Text(
-                    "ARI · READY WHEN YOU ARE", color = Color.White.copy(alpha = .9f),
+                    if (usedUp) "ARI · BACK AT MIDNIGHT" else "ARI · READY WHEN YOU ARE", color = Color.White.copy(alpha = .9f),
                     fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Text(
-                "A place to let it out.", style = DisplayStyle, color = Color.White,
-                fontSize = 40.sp, lineHeight = 45.sp, modifier = Modifier.semantics { heading() }
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Talk to Ari about whatever is on your mind. Speak or type, and go at your own pace.",
-                color = Color.White.copy(alpha = .92f), fontSize = 17.sp, lineHeight = 24.sp
-            )
-            Spacer(Modifier.height(24.dp))
-            Surface(onClick = onStartTalking, shape = CircleShape, color = Color.White, modifier = Modifier.fillMaxWidth()) {
-                Box(Modifier.height(58.dp), contentAlignment = Alignment.Center) {
-                    Text("Start talking", color = Color(0xFF332542), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            if (usedUp) {
+                Text(
+                    "You've had today's ${allowance!!.chatsPerDay} chats", style = DisplayStyle, color = Color.White,
+                    fontSize = 34.sp, lineHeight = 40.sp, modifier = Modifier.semantics { heading() }
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Thank you for making time for yourself. $COMPANION_NAME will be ready again at midnight, " +
+                        "${resetInLabel(allowance.resetsAt, System.currentTimeMillis())}.",
+                    color = Color.White.copy(alpha = .92f), fontSize = 17.sp, lineHeight = 24.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                AllowanceBars(allowance.chatsPerDay, 0)
+                Spacer(Modifier.height(20.dp))
+                Surface(onClick = { onDial("14416") }, shape = CircleShape, color = Color.White, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.height(58.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(AppIcons.Phone, contentDescription = null, tint = Color(0xFF332542), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Text("Talk to someone now · 14416", color = Color(0xFF332542), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                Text(
+                    "A place to let it out.", style = DisplayStyle, color = Color.White,
+                    fontSize = 40.sp, lineHeight = 45.sp, modifier = Modifier.semantics { heading() }
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Talk to Ari about whatever is on your mind. Speak or type, and go at your own pace.",
+                    color = Color.White.copy(alpha = .92f), fontSize = 17.sp, lineHeight = 24.sp
+                )
+                allowance?.let {
+                    Spacer(Modifier.height(16.dp))
+                    AllowanceBars(it.chatsPerDay, it.chatsLeft)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "${it.chatsLeft} of ${it.chatsPerDay} free chats left today · up to ${it.chatMinutes} min each",
+                        color = Color.White.copy(alpha = .9f), fontSize = 13.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
+                Surface(onClick = onStartTalking, shape = CircleShape, color = Color.White, modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.height(58.dp), contentAlignment = Alignment.Center) {
+                        Text("Start talking", color = Color(0xFF332542), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                if (showLive && allowance?.liveEnabled == true) {
+                    Spacer(Modifier.height(8.dp))
+                    LiveRow(allowance, onSeeLive)
                 }
             }
             if (hasSummary) {
@@ -112,6 +157,41 @@ internal fun HomeScreen(
                 "$TEST_BUILD_NOTICE For adults 18+.",
                 color = Color.White.copy(alpha = .8f), fontSize = 12.sp, lineHeight = 17.sp
             )
+        }
+    }
+}
+
+/** One bar per free chat today; filled bars are the ones left. */
+@Composable
+private fun AllowanceBars(total: Int, left: Int) {
+    Row(
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "$left of $total free chats left today" },
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        repeat(total) { index ->
+            Box(
+                Modifier.weight(1f).height(6.dp)
+                    .background(if (index >= total - left) Color.White else Color.White.copy(alpha = .28f), CircleShape)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiveRow(allowance: Allowance, onSeeLive: () -> Unit) {
+    val detail = if (allowance.liveAvailable) "${(allowance.liveSeconds + 59) / 60}-minute preview · 1 left this week"
+        else allowance.nextLiveAt?.let { "Next preview ${shortDateLabel(it)}" } ?: "Used this week"
+    Surface(
+        onClick = onSeeLive, enabled = allowance.liveAvailable, shape = CircleShape,
+        color = Color.White.copy(alpha = .16f), modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.height(54.dp).padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(AppIcons.Video, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Text("See $COMPANION_NAME live", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(detail, Modifier.weight(1f), color = Color.White.copy(alpha = .85f), fontSize = 13.sp, maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.End)
         }
     }
 }

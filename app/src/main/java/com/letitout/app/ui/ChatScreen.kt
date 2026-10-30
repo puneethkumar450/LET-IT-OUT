@@ -9,6 +9,7 @@ import android.media.AudioFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -67,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -116,6 +118,7 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -123,6 +126,7 @@ internal fun ChatScreen(
     vm: AppViewModel,
     speechRuntime: AriSpeechRuntime,
     liveController: LiveAvatarController,
+    /** Opens the live preview's intro sheet on entry; a preview never starts without a tap. */
     openLiveOnEntry: Boolean,
     onHome: () -> Unit,
     onHumanSupport: () -> Unit,
@@ -146,7 +150,13 @@ internal fun ChatScreen(
     var liveReady by remember { mutableStateOf(false) }
     var liveError by remember { mutableStateOf<String?>(null) }
     var liveStartId by remember { mutableStateOf(0L) }
-    var autoStartAttempted by rememberSaveable { mutableStateOf(false) }
+    var liveSeconds by remember { mutableStateOf(180L) }
+    // The preview's clock starts at the first video frame, not while connecting.
+    var liveEndsAt by remember { mutableStateOf<Long?>(null) }
+    var liveEnded by remember { mutableStateOf(false) }
+    var showLiveIntro by rememberSaveable {
+        mutableStateOf(openLiveOnEntry && BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !state.supportMode && !state.timeUp)
+    }
     var liveOpenedAfter by remember { mutableStateOf(0L) }
     var lastAutoSpokenId by remember { mutableStateOf<Long?>(null) }
     var confirmRelease by remember { mutableStateOf(false) }
@@ -230,6 +240,7 @@ internal fun ChatScreen(
         liveRequested = false
         liveReady = false
         liveToken = null
+        liveEndsAt = null
     }
     val endConversation: () -> Unit = {
         menuOpen = false
@@ -247,14 +258,27 @@ internal fun ChatScreen(
         liveOpenedAfter = state.messages.maxOfOrNull { it.id } ?: 0L
         liveRequested = true
         liveError = null
+        liveEnded = false
+        showLiveIntro = false
         scope.launch {
             try {
-                val token = vm.avatarSessionToken(if (state.settings.followMoodTheme) state.mood else Mood.TALK)
-                if (liveRequested && liveStartId == requestId) liveToken = token
-            } catch (_: Exception) {
+                val session = vm.startLivePreview(if (state.settings.followMoodTheme) state.mood else Mood.TALK)
+                if (liveRequested && liveStartId == requestId) {
+                    liveSeconds = session.seconds
+                    liveToken = session.sessionToken
+                }
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
                 if (liveRequested && liveStartId == requestId) {
                     stopLive()
-                    liveError = "Talking avatar is unavailable. The portrait and device voice still work."
+                    val reason = vm.handleLiveFailure(e)
+                    liveError = when (reason?.code) {
+                        "live_used" -> "You've had this week's live preview." +
+                            (reason.nextLiveAt?.let { " The next one is ready on ${shortDateLabel(it)}." } ?: "")
+                        "daily_limit", "busy", "session_ended" -> null
+                        else -> "Talking avatar is unavailable. The portrait and device voice still work."
+                    }
                 }
             }
         }
@@ -330,7 +354,17 @@ internal fun ChatScreen(
             else micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
-    val canSend = state.signedIn && input.isNotBlank() && !state.loading
+    // Ticks once a second for the chat and live timers.
+    val now by produceState(SystemClock.elapsedRealtime()) {
+        while (true) {
+            value = SystemClock.elapsedRealtime()
+            delay(1000)
+        }
+    }
+    val chatRemaining = state.chatEndsAt?.let { it - now }
+    // Between the timer reaching zero and Ari's goodbye arriving, nothing new can be sent.
+    val chatOver = state.timeUp || (chatRemaining != null && chatRemaining <= 0)
+    val canSend = state.signedIn && input.isNotBlank() && !state.loading && !chatOver
     val submitMessage: () -> Unit = {
         if (canSend) {
             stopSpeaking()
@@ -358,19 +392,28 @@ internal fun ChatScreen(
     // The list shrinks as the keyboard slides up; follow it so the newest message stays in view.
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(imeBottom) { if (imeBottom > 0) listState.scrollToItem(itemCount - 1, Int.MAX_VALUE) }
-    BackHandler { if (liveRequested) stopLive() else onHome() }
+    BackHandler {
+        when {
+            showLiveIntro -> showLiveIntro = false
+            liveRequested -> stopLive()
+            else -> { vm.clearBlock(); onHome() }
+        }
+    }
 
     val supportMode = state.supportMode
     LaunchedEffect(supportMode) { if (supportMode && liveRequested) stopLive() }
-    val autoStartLive = openLiveOnEntry && BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode && !autoStartAttempted
-    LaunchedEffect(state.signedIn, supportMode) {
-        if (autoStartLive) {
-            autoStartAttempted = true
-            startLive()
+    LaunchedEffect(chatOver) { if (chatOver && liveRequested) stopLive() }
+    LaunchedEffect(liveEndsAt) {
+        val endsAt = liveEndsAt ?: return@LaunchedEffect
+        delay((endsAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+        if (liveRequested) {
+            stopLive()
+            liveEnded = true
+            vm.refreshAllowance()
         }
     }
-    // Draw the live layout from the first frame when it is about to start, so the text chat doesn't flash.
-    val showLive = liveRequested || autoStartLive
+    LaunchedEffect(state.messages.size) { if (state.messages.lastOrNull()?.fromUser == true) liveEnded = false }
+    val showLive = liveRequested
     val palette = if (supportMode || !state.settings.followMoodTheme) Mood.TALK.palette() else state.mood.palette()
     val startRelease: () -> Unit = {
         confirmRelease = false
@@ -400,7 +443,15 @@ internal fun ChatScreen(
                         controller = liveController,
                         backgroundColor = palette.surface,
                         modifier = Modifier.fillMaxSize().zIndex(1f),
-                        onReady = { if (liveRequested && liveToken == token) liveReady = true },
+                        onReady = {
+                            if (liveRequested && liveToken == token) {
+                                liveReady = true
+                                if (liveEndsAt == null) {
+                                    liveEndsAt = SystemClock.elapsedRealtime() + liveSeconds * 1000
+                                    vm.confirmLivePreview()
+                                }
+                            }
+                        },
                         onFailure = {
                             if (liveRequested && liveToken == token) {
                                 val interrupted = liveUtterance.getAndSet(null)
@@ -439,7 +490,17 @@ internal fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         ChipButton("Show chat", stopLive, AppColors.Surface, AppColors.Ink, icon = AppIcons.Chat, iconTint = palette.accent)
+                        liveEndsAt?.let { endsAt ->
+                            val left = endsAt - now
+                            TimerPill(
+                                "Live · ${liveClockLabel(left)}", "${liveClockLabel(left)} left in the live preview",
+                                AppIcons.Video, palette.accent, warm = left <= LIVE_WARNING_MS
+                            )
+                        }
                         ChipButton(if (state.messages.isEmpty()) "End chat" else "Let it go", requestEnd, AppColors.Surface, AppColors.Danger)
+                    }
+                    liveEndsAt?.takeIf { it - now in 1..LIVE_WARNING_MS }?.let {
+                        TrialNote("The live preview ends in 30 seconds. Your chat carries on in text after.", AppIcons.Clock, warm = true, accent = palette.accent)
                     }
                     Spacer(Modifier.weight(1f))
                     LiveCaption(state.messages, state.loading, palette.accent)
@@ -488,21 +549,30 @@ internal fun ChatScreen(
                             modifier = Modifier.padding(3.dp).clip(CircleShape)
                         )
                     }
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(COMPANION_NAME, style = DisplayStyle, fontSize = 18.sp, maxLines = 1)
-                        Text(
-                            if (supportMode) "Support options" else "Listening with care",
-                            color = AppColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
+                        // The timer sits under the name so it fits beside the buttons on narrow phones.
+                        when {
+                            supportMode -> TimerPill("Support · no time limit", "Support options. No time limit while you get support", AppIcons.ShieldCheck, palette.accent, warm = false, compact = true)
+                            chatRemaining != null && !chatOver -> TimerPill(
+                                minutesLeftLabel(chatRemaining), "${minutesLeftLabel(chatRemaining)} in this chat",
+                                AppIcons.Clock, palette.accent, warm = chatRemaining <= CHAT_WARNING_MS, compact = true
+                            )
+                            else -> Text(
+                                "Listening with care",
+                                color = AppColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
                     }
                     Box {
                         SquareIconButton(AppIcons.More, "More options", { menuOpen = true }, shadowColor = palette.accent)
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(16.dp)) {
-                            if (BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode) {
+                            if (BuildConfig.LIVE_AVATAR_PILOT && state.signedIn && !supportMode && !chatOver) {
                                 DropdownMenuItem(
-                                    text = { Text("Return to live avatar") },
-                                    onClick = { menuOpen = false; startLive() }
+                                    text = { Text("See $COMPANION_NAME live") },
+                                    leadingIcon = { Icon(AppIcons.Video, contentDescription = null) },
+                                    onClick = { menuOpen = false; showLiveIntro = true }
                                 )
                             }
                             HorizontalDivider(color = palette.accent.copy(alpha = .12f))
@@ -566,6 +636,17 @@ internal fun ChatScreen(
                 if (!online) StatusPill("No internet connection", AppColors.Warning)
                 speechError?.let { StatusPill(it, AppColors.Danger) }
                 liveError?.let { StatusPill(it, AppColors.Danger) }
+                if (liveEnded) StatusPill("Live preview ended · carrying on here", palette.accent)
+                when {
+                    supportMode -> Text(
+                        "No timer while you get support, and this chat doesn't count toward today's chats.",
+                        Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
+                    )
+                    chatRemaining != null && !chatOver && chatRemaining <= CHAT_WARNING_MS -> TrialNote(
+                        "About 2 minutes left in this chat. Take your time to finish your thought.",
+                        AppIcons.Clock, warm = true, accent = palette.accent
+                    )
+                }
                 if (!state.signedIn) {
                     Row(
                         Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
@@ -575,12 +656,38 @@ internal fun ChatScreen(
                         LinkButton("Sign in", AppColors.Primary, onSignIn)
                     }
                 }
-                Composer(
+                if (state.timeUp) TimeUpCard(
+                    minutes = state.allowance?.chatMinutes ?: 15,
+                    chatsLeft = state.allowance?.chatsLeft,
+                    palette = palette,
+                    onLetItGo = startRelease,
+                    onNewChat = { input = ""; vm.newConversation() },
+                    onHome = onHome
+                ) else Composer(
                     input = input, onInputChange = { input = it }, palette = palette,
                     placeholder = if (supportMode) "Keep talking, if you'd like…" else "Say what's on your mind…",
-                    signedIn = state.signedIn, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
+                    signedIn = state.signedIn && !chatOver, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
                     onMic = toggleMic, onSend = submitMessage,
                     onDone = { focusManager.clearFocus(); keyboard?.hide() }
+                )
+            }
+        }
+        if (showLiveIntro && !showLive) {
+            LiveIntroSheet(
+                seconds = state.allowance?.liveSeconds ?: 180, palette = palette,
+                onStart = startLive, onDismiss = { showLiveIntro = false }
+            )
+        }
+        state.block?.let { block ->
+            Box(Modifier.fillMaxSize().zIndex(8f)) {
+                TrialBlockScreen(
+                    busy = block == TrialBlock.BUSY,
+                    resetsAt = state.allowance?.resetsAt,
+                    now = System.currentTimeMillis(),
+                    palette = palette,
+                    onBack = { vm.clearBlock(); onHome() },
+                    onTryAgain = vm::retry,
+                    onDial = { dialNumber(context, it) }
                 )
             }
         }

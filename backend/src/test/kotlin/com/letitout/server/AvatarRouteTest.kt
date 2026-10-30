@@ -20,7 +20,7 @@ class AvatarRouteTest {
             module(config, avatarDependencies = AvatarDependencies(
                 ready = { true },
                 verifyUid = { token, _ -> if (token == "valid") "user-1" else error("bad token") },
-                createSession = { _, mood ->
+                createSession = { _, mood, _ ->
                     assertEquals("ANGRY", mood)
                     providerCalls++
                     "temporary-session-token"
@@ -34,7 +34,7 @@ class AvatarRouteTest {
         }.status)
         assertEquals(0, providerCalls)
 
-        val response = client.post("/v1/avatar/session?mood=ANGRY") { header(HttpHeaders.Authorization, "Bearer valid") }
+        val response = client.post("/v1/avatar/session?mood=ANGRY&sessionId=chat-0001") { header(HttpHeaders.Authorization, "Bearer valid") }
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("no-store", response.headers[HttpHeaders.CacheControl])
         assertTrue(response.bodyAsText().contains("temporary-session-token"))
@@ -47,11 +47,11 @@ class AvatarRouteTest {
             module(config, avatarDependencies = AvatarDependencies(
                 ready = { true },
                 verifyUid = { _, _ -> "user-1" },
-                createSession = { _, _ -> error("secret provider diagnostic") },
+                createSession = { _, _, _ -> error("secret provider diagnostic") },
                 rateLimiter = { allowAll() }
             ))
         }
-        val response = client.post("/v1/avatar/session") { header(HttpHeaders.Authorization, "Bearer valid") }
+        val response = client.post("/v1/avatar/session?sessionId=chat-0001") { header(HttpHeaders.Authorization, "Bearer valid") }
         assertEquals(HttpStatusCode.BadGateway, response.status)
         assertFalse(response.bodyAsText().contains("secret"))
     }
@@ -62,7 +62,7 @@ class AvatarRouteTest {
             module(config, avatarDependencies = AvatarDependencies(
                 ready = { true },
                 verifyUid = { _, _ -> "user-1" },
-                createSession = { _, _ -> providerCalls++; "unused" },
+                createSession = { _, _, _ -> providerCalls++; "unused" },
                 rateLimiter = { object : RateLimiter { override suspend fun allow(uid: String) = false } }
             ))
         }

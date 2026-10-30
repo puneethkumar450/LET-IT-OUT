@@ -36,7 +36,18 @@ interface ChatApi {
     ): ChatResponse
 
     @POST("v1/avatar/session")
-    suspend fun avatarSession(@Header("Authorization") authorization: String, @Query("mood") mood: String): AvatarSessionResponse
+    suspend fun avatarSession(
+        @Header("Authorization") authorization: String,
+        @Query("mood") mood: String,
+        @Query("sessionId") sessionId: String
+    ): AvatarSessionResponse
+
+    /** Tells the server Ari's video appeared, so the week's live preview counts. */
+    @POST("v1/avatar/started")
+    suspend fun avatarStarted(@Header("Authorization") authorization: String, @Query("sessionId") sessionId: String): retrofit2.Response<Unit>
+
+    @GET("v1/allowance")
+    suspend fun allowance(@Header("Authorization") authorization: String): Allowance
 }
 
 @Singleton
@@ -49,14 +60,22 @@ class ChatRepository @Inject constructor(private val api: ChatApi, private val t
         backend.await()
     }
 
-    suspend fun avatarSessionToken(mood: Mood): String = api.avatarSession("Bearer ${tokenProvider.idToken()}", mood.name).sessionToken
-    suspend fun reply(mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null): ChatResponse {
+    suspend fun avatarSession(mood: Mood, sessionId: String): AvatarSessionResponse =
+        api.avatarSession("Bearer ${tokenProvider.idToken()}", mood.name, sessionId)
+    suspend fun avatarStarted(sessionId: String) {
+        api.avatarStarted("Bearer ${tokenProvider.idToken()}", sessionId)
+    }
+    suspend fun allowance(): Allowance = api.allowance("Bearer ${tokenProvider.idToken()}")
+    suspend fun reply(
+        mood: Mood, conversation: List<ChatMessage>, intensity: Int? = null,
+        sessionId: String? = null, closing: Boolean = false
+    ): ChatResponse {
         val idToken = tokenProvider.idToken()
         return api.chat(
             "Bearer $idToken",
             ChatRequest(mood.name, conversation.takeLast(12).map {
                 ApiMessage(if (it.fromUser) "user" else "assistant", it.text)
-            }, intensity)
+            }, intensity, sessionId, closing)
         )
     }
 }

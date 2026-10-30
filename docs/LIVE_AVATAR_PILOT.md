@@ -30,7 +30,7 @@ In debug builds, Start talking on the Ari welcome screen opens the full-screen S
 
 The welcome screen uses lifecycle-aware coroutines to fetch a Firebase ID token and warm the backend `/health` connection, initialize Android TTS, and load the local avatar JavaScript in a reusable WebView. This does not request a Simli token or start streaming; those happen after Start talking. The effect on device startup time has not yet been measured.
 
-The backend checks Firebase authentication, limits avatar sessions to three starts per user and 60 globally per hour, and mints a [Simli session token](https://docs.simli.com/api-reference/compose-session-token). It never returns the Simli API key. Sessions are capped at five minutes and close after two idle minutes. These are pilot cost controls; review them before a public rollout.
+The backend checks Firebase authentication, limits avatar sessions to three starts per user and 60 globally per hour, and mints a [Simli session token](https://docs.simli.com/api-reference/compose-session-token). It never returns the Simli API key. Each session is also a free-trial live preview (`docs/FREE_TRIAL_LIMITS.md`): 3 minutes once every 7 days, started only from the intro sheet, with the Simli session capped at the preview length plus 20 seconds. Sessions close after two idle minutes.
 
 ## How replies play
 

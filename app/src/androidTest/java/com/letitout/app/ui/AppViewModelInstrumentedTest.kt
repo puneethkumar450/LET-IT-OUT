@@ -160,8 +160,14 @@ class AppViewModelInstrumentedTest {
             continuations += continuation
         }
 
-        override suspend fun avatarSession(authorization: String, mood: String) =
+        override suspend fun avatarSession(authorization: String, mood: String, sessionId: String) =
             error("Live avatar is not used by this chat ViewModel test")
+
+        override suspend fun avatarStarted(authorization: String, sessionId: String) =
+            error("Live avatar is not used by this chat ViewModel test")
+
+        override suspend fun allowance(authorization: String) =
+            error("Allowance is not used by this chat ViewModel test")
 
         fun reply(index: Int, text: String, safetyState: String = "NORMAL") =
             continuations[index].resume(ChatResponse(text, safetyState))

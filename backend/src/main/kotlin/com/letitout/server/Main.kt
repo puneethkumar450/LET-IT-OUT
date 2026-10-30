@@ -29,9 +29,26 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 
 @Serializable data class Message(val role: String, val content: String)
-@Serializable data class ChatRequest(val mood: String, val messages: List<Message>, val intensity: Int? = null)
-@Serializable data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
-@Serializable data class ErrorResponse(val error: String)
+/**
+ * [sessionId] names one chat for the free-trial limits. [closing] asks for Ari's goodbye once the
+ * chat's time is up; it is the only request whose last message may be Ari's.
+ */
+@Serializable data class ChatRequest(
+    val mood: String,
+    val messages: List<Message>,
+    val intensity: Int? = null,
+    val sessionId: String? = null,
+    val closing: Boolean = false
+)
+/** [secondsLeft] is the chat's remaining time, or null when it has no limit; [ended] marks Ari's goodbye. */
+@Serializable data class ChatResponse(
+    val reply: String,
+    val safetyState: String = "NORMAL",
+    val secondsLeft: Long? = null,
+    val ended: Boolean = false
+)
+/** [code] lets the app pick a screen: daily_limit, session_ended, live_used or busy. */
+@Serializable data class ErrorResponse(val error: String, val code: String? = null, val nextLiveAt: Long? = null)
 
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(7)).build()
@@ -51,6 +68,11 @@ If you suspect imminent danger or risk of self-harm, prioritize immediate human 
 If the person sounds hopeless or hints at not wanting to live, gently and directly ask whether they are thinking about ending their life, and encourage them to call Tele-MANAS on 14416 or 112 in an emergency (India).
 You can respond in the user's language when confident; do not invent helpline information.
 """.trimIndent()
+
+private val closingPrompt = """
+This chat's free time has just ended. Say a warm goodbye in one or two short sentences that reflects
+what they shared. Do not ask a question. You may mention they can talk to you again another time.
+""".trimIndent().replace('\n', ' ')
 
 private fun setupFirebase(config: ServerConfig) {
     val projectId = config.projectId ?: return
@@ -76,7 +98,8 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
     val apiKey = requireNotNull(config.groqApiKey)
     val recent = req.messages.takeLast(12)
     val intensityNote = req.intensity?.takeIf { it in 1..10 }?.let { " Self-rated intensity: $it/10." } ?: ""
-    val fullPrompt = "$prompt\nUser-selected mood: ${req.mood}.$intensityNote Do not assume mood is clinically accurate."
+    val closingNote = if (req.closing) "\n$closingPrompt" else ""
+    val fullPrompt = "$prompt\nUser-selected mood: ${req.mood}.$intensityNote Do not assume mood is clinically accurate.$closingNote"
     val body = buildJsonObject {
         put("model", config.groqModel)
         put("temperature", 0.5)
@@ -87,6 +110,7 @@ private suspend fun groqReply(req: ChatRequest, config: ServerConfig): String = 
             recent.forEach { msg ->
                 add(buildJsonObject { put("role", msg.role); put("content", msg.content) })
             }
+            if (req.closing) add(buildJsonObject { put("role", "user"); put("content", "(The chat time is up. Please say goodbye.)") })
         }
     }
     groqCompletion(apiKey, body, timeoutSeconds = 25)
@@ -124,7 +148,11 @@ internal data class ChatDependencies(
     val rateLimiter: (ServerConfig) -> RateLimiter = { config ->
         if (config.production) FirestoreRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
         else LocalRateLimiter(config.perUserHourlyLimit, config.globalHourlyLimit)
-    }
+    },
+    val trialStore: (ServerConfig) -> TrialStore = { config ->
+        if (config.production) FirestoreTrialStore(config.trial) else LocalTrialStore()
+    },
+    val clock: () -> Long = ::nowSeconds
 )
 
 fun main() {
@@ -137,7 +165,22 @@ internal fun validChatRequest(req: ChatRequest): Boolean =
     req.mood in supportedMoods && req.messages.isNotEmpty() && req.messages.size <= 12 &&
         (req.intensity == null || req.intensity in 1..10) &&
         req.messages.all { it.role in setOf("user", "assistant") && it.content.isNotBlank() && it.content.length <= 2000 } &&
-        req.messages.last().role == "user"
+        (req.closing || req.messages.last().role == "user") && validSessionId(req.sessionId)
+
+private suspend fun ApplicationCall.respondError(status: HttpStatusCode, error: ErrorResponse) =
+    respondText(json.encodeToString(error), ContentType.Application.Json, status)
+
+internal val busyError = ErrorResponse("Ari is taking a short break. Please try again in about an hour.", "busy")
+
+private suspend fun ApplicationCall.bearerUid(
+    config: ServerConfig,
+    verify: suspend (String, ServerConfig) -> String
+): String? {
+    val idToken = request.headers[HttpHeaders.Authorization]
+        ?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer ")
+    if (idToken.isNullOrBlank()) return null
+    return try { verify(idToken, config) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+}
 
 private suspend fun ApplicationCall.boundedBody(maxBytes: Int = 20_000): String? {
     val channel = receiveChannel()
@@ -158,8 +201,23 @@ internal fun Application.module(
     avatarDependencies: AvatarDependencies = AvatarDependencies()
 ) {
     val limiter: RateLimiter by lazy { dependencies.rateLimiter(config) }
+    val trial: TrialStore by lazy { dependencies.trialStore(config) }
+    val policy = TrialPolicy(config.trial)
     routing {
-        registerAvatarRoutes(config, avatarDependencies)
+        registerAvatarRoutes(config, avatarDependencies, { trial }, policy, dependencies.clock)
+        get("/v1/allowance") {
+            call.response.header(HttpHeaders.CacheControl, "no-store")
+            if (!dependencies.ready(config)) return@get call.respond(HttpStatusCode.ServiceUnavailable)
+            val uid = call.bearerUid(config, dependencies.verifyUid) ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            val allowance = try {
+                trial.update(uid) { state ->
+                    state to policy.allowance(state, dependencies.clock()).copy(liveEnabled = avatarDependencies.ready(config))
+                }
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+                return@get call.respond(HttpStatusCode.ServiceUnavailable)
+            }
+            call.respondText(json.encodeToString(allowance), ContentType.Application.Json)
+        }
         get("/health") { call.respondText("ok") }
         get("/ready") {
             if (!dependencies.ready(config)) {
@@ -176,16 +234,7 @@ internal fun Application.module(
                     ContentType.Application.Json, HttpStatusCode.ServiceUnavailable
                 )
             }
-            val idToken = call.request.headers[HttpHeaders.Authorization]
-                ?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer ")
-            if (idToken.isNullOrBlank()) return@post call.respond(HttpStatusCode.Unauthorized)
-            val uid = try {
-                dependencies.verifyUid(idToken, config)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                return@post call.respond(HttpStatusCode.Unauthorized)
-            }
+            val uid = call.bearerUid(config, dependencies.verifyUid) ?: return@post call.respond(HttpStatusCode.Unauthorized)
 
             if ((call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L) > 20_000L) {
                 return@post call.respond(HttpStatusCode.PayloadTooLarge)
@@ -194,34 +243,70 @@ internal fun Application.module(
             val req = try { json.decodeFromString<ChatRequest>(bodyText) }
                 catch (_: Exception) { return@post call.respond(HttpStatusCode.BadRequest) }
             if (!validChatRequest(req)) return@post call.respond(HttpStatusCode.BadRequest)
-            val allowed = try { limiter.allow(uid) } catch (cancel: CancellationException) {
+            val sessionId = requireNotNull(req.sessionId)
+            val crisisReply = ChatResponse(
+                reply = "I'm concerned about your safety. If you might act on these feelings, please contact emergency services or someone you trust right now. In India, call 112 for emergencies or Tele-MANAS at 14416 for support. Are you somewhere safe?",
+                safetyState = "CRISIS_SUPPORT"
+            )
+            // Crisis support never waits on a limit. Marking the chat lifts its timer and stops it counting.
+            suspend fun openSupport() {
+                try { trial.update(uid) { state -> policy.support(state, sessionId, dependencies.clock()) to Unit } }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (_: Exception) { System.err.println("Trial storage unavailable; support chat not recorded.") }
+                call.respondText(json.encodeToString(crisisReply), ContentType.Application.Json)
+            }
+
+            // The phrase check is local and free, so it runs before any limit. The classifier runs below.
+            // Both are INCOMPLETE: do not deploy publicly until expert-reviewed crisis handling replaces them.
+            if (!req.closing && mayNeedImmediateHelp(req.messages.last().content)) return@post openSupport()
+
+            val limit = try { limiter.check(uid) } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
                 System.err.println("Rate limit storage unavailable; chat request rejected.")
                 return@post call.respond(HttpStatusCode.ServiceUnavailable)
             }
-            if (!allowed) return@post call.respond(HttpStatusCode.TooManyRequests)
-
-            // Phrase check first, then the safety classifier over recent messages. Both are INCOMPLETE:
-            // do not deploy publicly until expert-reviewed crisis handling has replaced them.
-            val flagged = mayNeedImmediateHelp(req.messages.last().content) || try {
-                dependencies.safetyCheck(req, config)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                true // Fail safe: an unchecked message gets crisis support, not an ordinary reply.
+            when (limit) {
+                RateLimit.USER -> return@post call.respond(HttpStatusCode.TooManyRequests)
+                RateLimit.GLOBAL -> return@post call.respondError(HttpStatusCode.ServiceUnavailable, busyError)
+                RateLimit.ALLOWED -> Unit
             }
-            if (flagged) {
-                return@post call.respondText(json.encodeToString(ChatResponse(
-                    reply = "I'm concerned about your safety. If you might act on these feelings, please contact emergency services or someone you trust right now. In India, call 112 for emergencies or Tele-MANAS at 14416 for support. Are you somewhere safe?",
-                    safetyState = "CRISIS_SUPPORT"
-                )), ContentType.Application.Json)
+
+            val gate = try {
+                trial.update(uid) { state -> policy.chat(state, sessionId, dependencies.clock(), req.closing) }
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+                System.err.println("Trial storage unavailable; chat request rejected.")
+                return@post call.respond(HttpStatusCode.ServiceUnavailable)
+            }
+            val secondsLeft = when (gate) {
+                ChatGate.DailyLimit -> return@post call.respondError(
+                    HttpStatusCode.Forbidden, ErrorResponse("You've had today's free chats.", "daily_limit")
+                )
+                ChatGate.SessionEnded -> return@post call.respondError(
+                    HttpStatusCode.Forbidden, ErrorResponse("This chat's time is up.", "session_ended")
+                )
+                ChatGate.Closing -> null
+                is ChatGate.Open -> gate.secondsLeft
+            }
+
+            if (!req.closing) {
+                val flagged = try {
+                    dependencies.safetyCheck(req, config)
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    true // Fail safe: an unchecked message gets crisis support, not an ordinary reply.
+                }
+                if (flagged) return@post openSupport()
             }
             try {
                 val answer = dependencies.reply(req, config)
-                call.respondText(json.encodeToString(ChatResponse(answer)), ContentType.Application.Json)
+                call.respondText(
+                    json.encodeToString(ChatResponse(answer, secondsLeft = secondsLeft, ended = gate == ChatGate.Closing)),
+                    ContentType.Application.Json
+                )
             } catch (_: ProviderRateLimited) {
-                call.respondText(json.encodeToString(ErrorResponse("AI is busy. Please try again shortly.")), ContentType.Application.Json, HttpStatusCode.TooManyRequests)
+                call.respondError(HttpStatusCode.ServiceUnavailable, busyError)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {

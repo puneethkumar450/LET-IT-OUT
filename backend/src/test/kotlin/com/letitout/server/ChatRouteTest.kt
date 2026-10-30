@@ -41,7 +41,7 @@ class ChatRouteTest {
         assertEquals(HttpStatusCode.BadRequest, client.post("/v1/chat") {
             header(HttpHeaders.Authorization, "Bearer valid")
             contentType(ContentType.Application.Json)
-            setBody("""{"mood":"SAD","messages":[{"role":"assistant","content":"Hello"}]}""")
+            setBody("""{"mood":"SAD","messages":[{"role":"assistant","content":"Hello"}],"sessionId":"chat-0001"}""")
         }.status)
 
         assertEquals(HttpStatusCode.PayloadTooLarge, client.post("/v1/chat") {
@@ -166,7 +166,7 @@ class ChatRouteTest {
     }
 
     private fun message(text: String): String =
-        """{"mood":"SAD","messages":[{"role":"user","content":"$text"}]}"""
+        """{"mood":"SAD","messages":[{"role":"user","content":"$text"}],"sessionId":"chat-0001"}"""
 
     private fun allowAll(): RateLimiter = object : RateLimiter {
         override suspend fun allow(uid: String) = true

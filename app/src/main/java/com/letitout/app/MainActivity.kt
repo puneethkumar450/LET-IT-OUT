@@ -40,6 +40,7 @@ import com.letitout.app.ui.ReleaseRitualScreen
 import com.letitout.app.ui.SettingsScreen
 import com.letitout.app.ui.SignInScreen
 import com.letitout.app.ui.SplashScreen
+import com.letitout.app.ui.dialNumber
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 
@@ -81,12 +82,15 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
     val liveController = remember(context) { LiveAvatarController() }
     DisposableEffect(liveController) { onDispose { liveController.destroy() } }
     var backStack by rememberSaveable { mutableStateOf(listOf("splash")) }
-    var openLiveOnEntry by rememberSaveable { mutableStateOf(true) }
+    var openLiveOnEntry by rememberSaveable { mutableStateOf(false) }
     var releaseHadSupport by rememberSaveable { mutableStateOf(false) }
     val page = backStack.last()
     LaunchedEffect(page, state.signedIn, lifecycleOwner, speechRuntime) {
         if (page == "home") lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            if (state.signedIn) vm.prewarmAri()
+            if (state.signedIn) {
+                vm.prewarmAri()
+                vm.refreshAllowance()
+            }
             delay(250)
             speechRuntime.prepare()
             delay(450)
@@ -128,8 +132,19 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                 "signin" -> SignInScreen(vm, onSignedIn = finishSignIn, onPreview = finishSignIn, onPrivacy = { navigateTo("privacy") })
                 "home" -> HomeScreen(
                     hasSummary = state.messages.isNotEmpty(),
-                    onStartTalking = { openLiveOnEntry = true; navigateTo("chat") },
+                    allowance = state.allowance.takeIf { state.signedIn },
+                    // A chat in progress can always be continued, even with today's chats used.
+                    chatInProgress = state.chatEndsAt != null || state.supportMode,
+                    showLive = BuildConfig.LIVE_AVATAR_PILOT && state.signedIn,
+                    onStartTalking = {
+                        openLiveOnEntry = false
+                        // A chat whose time is up can only be read back; Start talking begins a new one.
+                        if (state.timeUp) vm.newConversation()
+                        navigateTo("chat")
+                    },
+                    onSeeLive = { openLiveOnEntry = true; navigateTo("chat") },
                     onViewSummary = { openLiveOnEntry = false; navigateTo("chat") },
+                    onDial = { dialNumber(context, it) },
                     onSettings = { navigateTo("settings") }
                 )
                 "chat" -> ChatScreen(
@@ -148,7 +163,7 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                 )
                 "release" -> ReleaseRitualScreen(
                     hadSupport = releaseHadSupport,
-                    onTalkAgain = { openLiveOnEntry = true; popTo("home"); navigateTo("chat") },
+                    onTalkAgain = { openLiveOnEntry = false; popTo("home"); navigateTo("chat") },
                     onHome = { popTo("home") }
                 )
                 "settings" -> SettingsScreen(

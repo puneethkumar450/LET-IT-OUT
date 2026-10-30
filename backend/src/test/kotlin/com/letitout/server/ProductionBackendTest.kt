@@ -32,7 +32,10 @@ class ProductionBackendTest {
     }
 
     @Test fun rejectsInvalidConversationShape() {
-        assertTrue(validChatRequest(ChatRequest("HAPPY", listOf(Message("user", "Hello")), 5)))
+        assertTrue(validChatRequest(ChatRequest("HAPPY", listOf(Message("user", "Hello")), 5, "chat-0001")))
+        assertFalse(validChatRequest(ChatRequest("HAPPY", listOf(Message("user", "Hello")), 5)))
+        assertFalse(validChatRequest(ChatRequest("HAPPY", listOf(Message("assistant", "Bye")), sessionId = "chat-0001")))
+        assertTrue(validChatRequest(ChatRequest("HAPPY", listOf(Message("assistant", "Bye")), sessionId = "chat-0001", closing = true)))
         assertFalse(validChatRequest(ChatRequest("HAPPY", listOf(Message("user", "  ")))))
         assertFalse(validChatRequest(ChatRequest("HAPPY", listOf(Message("user", "Hello")), 11)))
         assertFalse(validChatRequest(ChatRequest("UNKNOWN", listOf(Message("user", "Hello")))))

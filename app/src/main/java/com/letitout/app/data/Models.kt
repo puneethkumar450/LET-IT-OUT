@@ -34,6 +34,32 @@ fun Mood.palette() = when (this) {
 data class ChatMessage(val id: Long, val text: String, val fromUser: Boolean, val supportResources: Boolean = false)
 
 data class ApiMessage(val role: String, val content: String)
-data class ChatRequest(val mood: String, val messages: List<ApiMessage>, val intensity: Int? = null)
-data class ChatResponse(val reply: String, val safetyState: String = "NORMAL")
-data class AvatarSessionResponse(val sessionToken: String)
+/** [sessionId] names this chat for the free-trial limits; [closing] asks for Ari's goodbye when time is up. */
+data class ChatRequest(
+    val mood: String,
+    val messages: List<ApiMessage>,
+    val intensity: Int? = null,
+    val sessionId: String? = null,
+    val closing: Boolean = false
+)
+/** [secondsLeft] is the chat's remaining time, or null when it has no limit; [ended] marks Ari's goodbye. */
+data class ChatResponse(
+    val reply: String,
+    val safetyState: String = "NORMAL",
+    val secondsLeft: Long? = null,
+    val ended: Boolean = false
+)
+/** [seconds] is how long the live preview may run, counted from its first video frame. */
+data class AvatarSessionResponse(val sessionToken: String, val seconds: Long = 180)
+
+/** Today's free-trial allowance from the server; times are epoch milliseconds. */
+data class Allowance(
+    val chatsPerDay: Int,
+    val chatsLeft: Int,
+    val chatMinutes: Int,
+    val resetsAt: Long,
+    val liveSeconds: Int,
+    val liveAvailable: Boolean,
+    val nextLiveAt: Long? = null,
+    val liveEnabled: Boolean = false
+)

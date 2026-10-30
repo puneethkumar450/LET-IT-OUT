@@ -2,7 +2,7 @@
 
 - **Initial model:** Groq `openai/gpt-oss-120b` via `https://api.groq.com/openai/v1/chat/completions`.
 - **Fallback candidate:** `openai/gpt-oss-20b`, only after response-quality and safety comparisons.
-- **Budget controls:** cap prompt history to 12 entries, 2,000 characters per message, output 220 tokens, and at most 20 requests per signed-in Firebase UID per hour in the prototype.
+- **Budget controls:** cap prompt history to 12 entries, 2,000 characters per message, output 220 tokens, at most 40 requests per signed-in Firebase UID per hour, and the free-trial limits in `docs/FREE_TRIAL_LIMITS.md` (3 chats a day of up to 15 minutes).
 - **Security:** backend-only Groq key; verified Firebase auth; never log prompts or responses.
 - **Privacy:** review Groq's current privacy/retention policies and obtain appropriate disclosures and consent before real emotional support use.
 - **Safety:** initial phrases are *illustrative*. Introduce expert-reviewed detection, multi-turn handling, post-response safety validation, and testing before closed/public beta.

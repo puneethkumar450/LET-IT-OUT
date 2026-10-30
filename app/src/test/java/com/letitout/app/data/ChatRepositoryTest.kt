@@ -46,7 +46,7 @@ class ChatRepositoryTest {
             ChatMessage(number.toLong(), "message $number", fromUser = number % 2 == 1)
         }
 
-        val response = repository().reply(Mood.ANXIOUS, conversation, intensity = 8)
+        val response = repository().reply(Mood.ANXIOUS, conversation, intensity = 8, sessionId = "chat-0001")
         val request = server.takeRequest()
         val body = request.body.readUtf8()
         val sent = moshi.adapter(ChatRequest::class.java).fromJson(body)!!
@@ -57,6 +57,8 @@ class ChatRepositoryTest {
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
         assertEquals("ANXIOUS", sent.mood)
         assertEquals(8, sent.intensity)
+        assertEquals("chat-0001", sent.sessionId)
+        assertFalse(sent.closing)
         assertEquals(12, sent.messages.size)
         assertEquals("message 4", sent.messages.first().content)
         assertEquals("assistant", sent.messages.first().role)
@@ -77,12 +79,28 @@ class ChatRepositoryTest {
     }
 
     @Test fun avatarSessionUsesFirebaseAuthorizationAndReceivesOnlyShortLivedToken() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"sessionToken":"short-lived"}"""))
-        assertEquals("short-lived", repository().avatarSessionToken(Mood.ANGRY))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"sessionToken":"short-lived","seconds":170}"""))
+        val session = repository().avatarSession(Mood.ANGRY, "chat-0001")
+        assertEquals("short-lived", session.sessionToken)
+        assertEquals(170L, session.seconds)
         val request = server.takeRequest()
-        assertEquals("/v1/avatar/session?mood=ANGRY", request.path)
+        assertEquals("/v1/avatar/session?mood=ANGRY&sessionId=chat-0001", request.path)
+        server.enqueue(MockResponse().setResponseCode(204))
+        repository().avatarStarted("chat-0001")
+        assertEquals("/v1/avatar/started?sessionId=chat-0001", server.takeRequest().path)
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
         assertEquals(0, request.body.size)
+    }
+
+    @Test fun allowanceReadsTodaysFreeTime() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(
+            """{"chatsPerDay":3,"chatsLeft":2,"chatMinutes":15,"resetsAt":1793300000000,"liveSeconds":180,"liveAvailable":false,"nextLiveAt":1793900000000,"liveEnabled":true}"""
+        ))
+        val allowance = repository().allowance()
+        assertEquals(2, allowance.chatsLeft)
+        assertEquals(1793900000000L, allowance.nextLiveAt)
+        assertTrue(allowance.liveEnabled)
+        assertEquals("/v1/allowance", server.takeRequest().path)
     }
 
     @Test fun prewarmUsesHealthWithoutStartingAvatarSession() = runBlocking {
@@ -102,8 +120,14 @@ class ChatRepositoryTest {
             override suspend fun chat(authorization: String, request: ChatRequest): ChatResponse {
                 throw AssertionError("Chat request must not run without a session")
             }
-            override suspend fun avatarSession(authorization: String, mood: String): AvatarSessionResponse {
+            override suspend fun avatarSession(authorization: String, mood: String, sessionId: String): AvatarSessionResponse {
                 throw AssertionError("Avatar request must not run without a session")
+            }
+            override suspend fun avatarStarted(authorization: String, sessionId: String): retrofit2.Response<Unit> {
+                throw AssertionError("Avatar request must not run without a session")
+            }
+            override suspend fun allowance(authorization: String): Allowance {
+                throw AssertionError("Allowance request must not run without a session")
             }
         }
         val repository = ChatRepository(api, object : SessionTokenProvider {
