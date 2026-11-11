@@ -63,7 +63,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private enum class SettingsDialog { CLEAR_DATA, DELETE_ACCOUNT }
-private const val PRIVACY_POLICY_URL = "https://let-it-go.in/privacy/"
 
 @Composable
 private fun privacyPolicyAction(): () -> Unit {
@@ -79,6 +78,19 @@ private fun privacyPolicyAction(): () -> Unit {
 }
 
 @Composable
+private fun termsOfServiceAction(): () -> Unit {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    return {
+        try {
+            uriHandler.openUri(TERMS_OF_SERVICE_URL)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Couldn't open the Terms of Service", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+@Composable
 internal fun SettingsScreen(
     vm: AppViewModel, speechRuntime: AriSpeechRuntime,
     onBack: () -> Unit, onPrivacy: () -> Unit, onSignIn: () -> Unit, onSignedOut: () -> Unit
@@ -86,6 +98,7 @@ internal fun SettingsScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val openPrivacyPolicy = privacyPolicyAction()
+    val openTermsOfService = termsOfServiceAction()
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
@@ -112,6 +125,8 @@ internal fun SettingsScreen(
         Spacer(Modifier.height(16.dp))
         SettingsGroup("Privacy & data") {
             SettingsRow("Privacy Policy", openPrivacyPolicy)
+            RowDivider()
+            SettingsRow("Terms of Service", openTermsOfService)
             RowDivider()
             SettingsRow("Privacy & Help", onPrivacy)
             RowDivider()

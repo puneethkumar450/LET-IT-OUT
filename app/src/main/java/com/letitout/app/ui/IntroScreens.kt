@@ -53,6 +53,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -192,6 +193,7 @@ private fun PageDots(current: Int, count: Int) {
 @Composable
 internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: () -> Unit, onPrivacy: () -> Unit) {
     val activity = requireNotNull(LocalActivity.current)
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -259,6 +261,8 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
             buildAnnotatedString {
                 append("Read about message processing in ")
                 withLink(LinkAnnotation.Clickable("privacy-help", linkStyle) { onPrivacy() }) { append("Privacy & Help") }
+                append(" · ")
+                withLink(LinkAnnotation.Clickable("terms", linkStyle) { uriHandler.openUri(TERMS_OF_SERVICE_URL) }) { append("Terms") }
                 append(". Let It Go is for adults 18 and older.")
             },
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 11.sp, lineHeight = 16.sp, textAlign = TextAlign.Center

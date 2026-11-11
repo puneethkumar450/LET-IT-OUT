@@ -32,7 +32,7 @@ Updated 26 October 2026. This is a navigation aid for future work; check the cur
 
 ## Known release blockers
 
-- `TODO.md` tracks the closed test. The backend is not yet deployed to Cloud Run; the Google Cloud CLI/account setup is pending. The privacy policy is published at `https://let-it-go.in/privacy/` with `support@let-it-go.in`. Android Settings and Privacy & Help now link to it, including the pre-sign-in Privacy & Help route. Play Console entries remain unverified; see `docs/DATA_SAFETY_REVIEW.md` for the source-based audit and policy discrepancies.
+- `TODO.md` tracks the closed test. The backend is not yet deployed to Cloud Run; the Google Cloud CLI/account setup is pending. The privacy policy is published at `https://let-it-go.in/privacy/` and Terms of Service at `https://let-it-go.in/terms/`, both using `support@let-it-go.in`. Android Settings and the pre-sign-in route link to the legal pages. Play Console entries remain unverified; see `docs/DATA_SAFETY_REVIEW.md` for the source-based audit and policy discrepancies.
 - The phrase plus model safety check is a prototype. Clinical review, multilingual crisis evaluation, privacy review, and physical-device voice/live-video checks remain open. Production chat is disabled by default.
 
 ## Verification and owner preferences
