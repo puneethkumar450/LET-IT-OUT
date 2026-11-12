@@ -17,6 +17,12 @@ offline voice is always available, or that local generation is clinically safe.
 
 ## Recommended first implementation
 
+**Started on `feature/offline-mode-plan`:** the first vertical slice now has a
+user-selectable Offline Ari preview, a local deterministic fallback runtime,
+offline/no-account chat entry, and tests for normal and obvious-risk responses.
+It is intentionally not presented as Gemini Nano or Gemma yet; the model-backed
+runtime will replace this seam after device capability testing.
+
 1. Detect Gemini Nano through ML Kit GenAI/AICore at runtime.
 2. Use Gemini Nano only when the model status is `AVAILABLE`.
 3. If the model is `DOWNLOADABLE`, offer a user-controlled model download over

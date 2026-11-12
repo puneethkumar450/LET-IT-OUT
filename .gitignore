@@ -16,3 +16,9 @@ app/google-services.json
 /backend/firebase-admin.json
 .DS_Store
 avatar-bridge/node_modules/
+
+# Local preview/render outputs and generated audio (source references in tmp/ stay tracked).
+brag-output/
+reel-output/
+tmp/ari-greeting-current.wav
+tmp/preview-*.png

@@ -308,7 +308,7 @@ internal fun ChatScreen(
         }
     }
     val transcriptReceived = androidx.compose.runtime.rememberUpdatedState<(String) -> Unit> { transcript ->
-        if (liveRequested && transcript.isNotBlank() && state.signedIn && !state.loading) {
+        if (liveRequested && transcript.isNotBlank() && (state.signedIn || state.settings.offlineMode) && !state.loading) {
             stopSpeaking()
             vm.send(transcript)
             input = ""
@@ -364,7 +364,8 @@ internal fun ChatScreen(
     val chatRemaining = state.chatEndsAt?.let { it - now }
     // Between the timer reaching zero and Ari's goodbye arriving, nothing new can be sent.
     val chatOver = state.timeUp || (chatRemaining != null && chatRemaining <= 0)
-    val canSend = state.signedIn && input.isNotBlank() && !state.loading && !chatOver
+    val offlineEnabled = state.settings.offlineMode
+    val canSend = (state.signedIn || offlineEnabled) && input.isNotBlank() && !state.loading && !chatOver
     val submitMessage: () -> Unit = {
         if (canSend) {
             stopSpeaking()
@@ -509,7 +510,7 @@ internal fun ChatScreen(
                     speechError?.let { StatusPill(it, AppColors.Danger) }
                     state.error?.let { StatusPill(it, AppColors.Danger) }
                     if (isListening) StatusPill("Listening…", palette.accent)
-                    if (!state.signedIn) {
+                    if (!state.signedIn && !offlineEnabled) {
                         Row(
                             Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp))
                                 .padding(start = 16.dp, end = 4.dp),
@@ -522,7 +523,7 @@ internal fun ChatScreen(
                     Composer(
                         input = input, onInputChange = { input = it }, palette = palette,
                         placeholder = "Type or speak to $COMPANION_NAME…",
-                        signedIn = state.signedIn, canSend = canSend, showMic = true, isListening = isListening,
+                        signedIn = state.signedIn || offlineEnabled, canSend = canSend, showMic = true, isListening = isListening,
                         onMic = toggleMic, onSend = submitMessage,
                         onDone = { focusManager.clearFocus(); keyboard?.hide() }
                     )
@@ -647,7 +648,7 @@ internal fun ChatScreen(
                         AppIcons.Clock, warm = true, accent = palette.accent
                     )
                 }
-                if (!state.signedIn) {
+                if (!state.signedIn && !offlineEnabled) {
                     Row(
                         Modifier.fillMaxWidth().background(AppColors.Surface, RoundedCornerShape(18.dp)).padding(start = 16.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -666,7 +667,7 @@ internal fun ChatScreen(
                 ) else Composer(
                     input = input, onInputChange = { input = it }, palette = palette,
                     placeholder = if (supportMode) "Keep talking, if you'd like…" else "Say what's on your mind…",
-                    signedIn = state.signedIn && !chatOver, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
+                    signedIn = (state.signedIn || offlineEnabled) && !chatOver, canSend = canSend, showMic = state.settings.voiceInput, isListening = isListening,
                     onMic = toggleMic, onSend = submitMessage,
                     onDone = { focusManager.clearFocus(); keyboard?.hide() }
                 )

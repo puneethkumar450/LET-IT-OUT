@@ -20,6 +20,8 @@ data class AppSettings(
     val followMoodTheme: Boolean = true,
     val onboarded: Boolean = false,
     val reduceMotion: Boolean = false,
+    /** Use the local offline runtime instead of authenticated cloud chat. */
+    val offlineMode: Boolean = false,
     /** A TTS voice name; null uses Ari's default voice for this phone. */
     val ariVoice: String? = null
 )
@@ -32,6 +34,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     private val followMoodKey = booleanPreferencesKey("follow_mood_theme")
     private val onboardedKey = booleanPreferencesKey("onboarding_done")
     private val reduceMotionKey = booleanPreferencesKey("reduce_motion")
+    private val offlineModeKey = booleanPreferencesKey("offline_mode")
     private val ariVoiceKey = stringPreferencesKey("ari_voice")
 
     val mood: Flow<Mood> = context.dataStore.data.map { values ->
@@ -44,6 +47,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
             followMoodTheme = values[followMoodKey] ?: true,
             onboarded = values[onboardedKey] ?: false,
             reduceMotion = values[reduceMotionKey] ?: false,
+            offlineMode = values[offlineModeKey] ?: false,
             ariVoice = values[ariVoiceKey]
         )
     }
@@ -63,6 +67,7 @@ class MoodPreferences @Inject constructor(@ApplicationContext private val contex
     suspend fun setFollowMoodTheme(enabled: Boolean) = set(followMoodKey, enabled)
     suspend fun setOnboarded() = set(onboardedKey, true)
     suspend fun setReduceMotion(enabled: Boolean) = set(reduceMotionKey, enabled)
+    suspend fun setOfflineMode(enabled: Boolean) = set(offlineModeKey, enabled)
     suspend fun setAriVoice(name: String) {
         context.dataStore.edit { it[ariVoiceKey] = name }
     }

@@ -14,6 +14,7 @@ import com.letitout.app.data.ChatRequest
 import com.letitout.app.data.ChatResponse
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPreferences
+import com.letitout.app.data.OfflineAiRuntime
 import com.letitout.app.data.SessionTokenProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -127,7 +128,7 @@ class AppViewModelInstrumentedTest {
         val repository = ChatRepository(api, object : SessionTokenProvider {
             override suspend fun idToken() = "local-test-token"
         })
-        val viewModel = AppViewModel(repository, preferences, AuthManager(targetContext))
+        val viewModel = AppViewModel(repository, preferences, OfflineAiRuntime(), AuthManager(targetContext))
         val store = ViewModelStore().apply { put("test", viewModel) }
         try {
             await { viewModel.state.value.settings == AppSettings() && viewModel.state.value.mood == Mood.TALK }

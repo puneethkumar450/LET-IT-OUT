@@ -191,7 +191,7 @@ private fun PageDots(current: Int, count: Int) {
 }
 
 @Composable
-internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: () -> Unit, onPrivacy: () -> Unit) {
+internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: () -> Unit, onPrivacy: () -> Unit, onOffline: () -> Unit) {
     val activity = requireNotNull(LocalActivity.current)
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
@@ -226,8 +226,10 @@ internal fun SignInScreen(vm: AppViewModel, onSignedIn: () -> Unit, onPreview: (
             attempt("Guest sign-in failed") { vm.auth.signInGuest() }
         })
         Spacer(Modifier.height(14.dp))
+        OutlinePillButton("Try offline mode", enabled = !working, onClick = onOffline)
+        Spacer(Modifier.height(14.dp))
         Text(
-            "Guest mode doesn't ask for your name or email. You can connect Google later in Settings.",
+            "Offline mode keeps this preview on your phone. Guest mode doesn't ask for your name or email.",
             Modifier.fillMaxWidth(), color = AppColors.Muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center
         )
         if (working) {

@@ -119,6 +119,14 @@ internal fun SettingsScreen(
             SettingsRow("Ari's voice", { choosingVoice = true }, value = currentVoice?.label?.substringBefore(" ·") ?: "Phone default")
         }
         Spacer(Modifier.height(16.dp))
+        SettingsGroup("AI mode") {
+            ToggleRow("Offline Ari (preview)", state.settings.offlineMode, vm::setOfflineMode)
+            Text(
+                "Uses a local, deterministic fallback without an account or network. Gemini Nano/Gemma support will replace this runtime when available.",
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), color = AppColors.Muted, fontSize = 12.sp, lineHeight = 17.sp
+            )
+        }
+        Spacer(Modifier.height(16.dp))
         SettingsGroup("Display") {
             ToggleRow("Reduce motion", state.settings.reduceMotion, vm::setReduceMotion)
         }

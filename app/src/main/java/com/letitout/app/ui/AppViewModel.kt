@@ -10,6 +10,7 @@ import com.letitout.app.data.ChatMessage
 import com.letitout.app.data.ChatRepository
 import com.letitout.app.data.Mood
 import com.letitout.app.data.MoodPreferences
+import com.letitout.app.data.OfflineAiRuntime
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -44,6 +45,7 @@ internal const val FALLBACK_GOODBYE =
 class AppViewModel @Inject constructor(
     private val repository: ChatRepository,
     private val preferences: MoodPreferences,
+    private val offlineAi: OfflineAiRuntime,
     val auth: AuthManager
 ) : ViewModel() {
     data class UiState(
@@ -208,6 +210,7 @@ class AppViewModel @Inject constructor(
     fun setVoiceInput(enabled: Boolean) { viewModelScope.launch { preferences.setVoiceInput(enabled) } }
     fun setFollowMoodTheme(enabled: Boolean) { viewModelScope.launch { preferences.setFollowMoodTheme(enabled) } }
     fun setReduceMotion(enabled: Boolean) { viewModelScope.launch { preferences.setReduceMotion(enabled) } }
+    fun setOfflineMode(enabled: Boolean) { viewModelScope.launch { preferences.setOfflineMode(enabled) } }
     fun setAriVoice(name: String) { viewModelScope.launch { preferences.setAriVoice(name) } }
     fun finishOnboarding() { viewModelScope.launch { preferences.setOnboarded() } }
 
@@ -238,7 +241,11 @@ class AppViewModel @Inject constructor(
         replyJob = viewModelScope.launch {
             try {
                 val current = _state.value
-                val response = repository.reply(current.mood, current.messages, current.intensity, sessionId, closing)
+                val response = if (current.settings.offlineMode) {
+                    offlineAi.reply(current.mood, current.messages)
+                } else {
+                    repository.reply(current.mood, current.messages, current.intensity, sessionId, closing)
+                }
                 if (generation == replyGeneration.get()) {
                     val support = response.safetyState != "NORMAL"
                     val reply = ChatMessage(nextId++, response.reply, false, supportResources = support)

@@ -129,7 +129,13 @@ private fun LetItOutApp(vm: AppViewModel = hiltViewModel()) {
                     },
                     onBack = navigateBack
                 )
-                "signin" -> SignInScreen(vm, onSignedIn = finishSignIn, onPreview = finishSignIn, onPrivacy = { navigateTo("privacy") })
+                "signin" -> SignInScreen(
+                    vm,
+                    onSignedIn = finishSignIn,
+                    onPreview = finishSignIn,
+                    onPrivacy = { navigateTo("privacy") },
+                    onOffline = { vm.setOfflineMode(true); vm.finishOnboarding(); resetTo("home") }
+                )
                 "home" -> HomeScreen(
                     hasSummary = state.messages.isNotEmpty(),
                     allowance = state.allowance.takeIf { state.signedIn },
