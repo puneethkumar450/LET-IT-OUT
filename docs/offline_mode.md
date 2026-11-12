@@ -84,6 +84,22 @@ Git or bundled in the APK. A future model download screen must verify the
 Gemma license/notice, free storage, Wi-Fi consent, checksum, cancellation, and
 resume behavior.
 
+### Gemma licensing and policy boundary
+
+Gemma is **not MIT-licensed**. This app must use the exact Gemma Terms of Use
+and Google's Gemma Prohibited Use Policy that apply to the selected model
+version. The app includes `app/src/main/assets/gemma_notice.txt` with the
+required redistribution notice and links. If a Gemma model or model derivative
+is distributed to users, the distribution must also pass through the applicable
+use restrictions and provide the terms to recipients. Do not describe Gemma as
+MIT, claim Google endorsement, or present Ari as a medical, legal, financial, or
+emergency service. The app must retain its safety checks, disclose that replies
+are AI-generated, and provide human/emergency support routing.
+
+Before publishing a model download or bundling weights, verify the selected
+model's current license, notice requirements, model-card limitations, and
+Google Play policy with legal counsel. The official terms can change.
+
 ### Costs that remain
 
 Play developer fees, model hosting/download bandwidth, support, testing, and

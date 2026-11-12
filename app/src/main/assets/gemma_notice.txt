@@ -1,0 +1,9 @@
+Gemma is provided under and subject to the Gemma Terms of Use found at
+https://ai.google.dev/gemma/terms
+
+Gemma use is also subject to Google's Gemma Prohibited Use Policy:
+https://ai.google.dev/gemma/prohibited_use_policy
+
+Let It Out does not claim ownership of Gemma or imply Google's endorsement.
+The app's Ari safety guidance and crisis routing remain the responsibility of
+the app operator and do not replace emergency or professional care.
