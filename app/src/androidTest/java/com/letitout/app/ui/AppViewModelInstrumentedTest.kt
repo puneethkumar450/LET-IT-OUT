@@ -128,7 +128,7 @@ class AppViewModelInstrumentedTest {
         val repository = ChatRepository(api, object : SessionTokenProvider {
             override suspend fun idToken() = "local-test-token"
         })
-        val viewModel = AppViewModel(repository, preferences, OfflineAiRuntime(), AuthManager(targetContext))
+        val viewModel = AppViewModel(repository, preferences, OfflineAiRuntime(targetContext), AuthManager(targetContext))
         val store = ViewModelStore().apply { put("test", viewModel) }
         try {
             await { viewModel.state.value.settings == AppSettings() && viewModel.state.value.mood == Mood.TALK }

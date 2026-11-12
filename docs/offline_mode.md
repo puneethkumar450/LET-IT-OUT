@@ -20,8 +20,8 @@ offline voice is always available, or that local generation is clinically safe.
 **Started on `feature/offline-mode-plan`:** the first vertical slice now has a
 user-selectable Offline Ari preview, a local deterministic fallback runtime,
 offline/no-account chat entry, and tests for normal and obvious-risk responses.
-It is intentionally not presented as Gemini Nano or Gemma yet; the model-backed
-runtime will replace this seam after device capability testing.
+The Gemma runtime is now wired behind the same seam; it becomes active when the
+user has downloaded `files/offline-models/ari-gemma.task`.
 
 1. Detect Gemini Nano through ML Kit GenAI/AICore at runtime.
 2. Use Gemini Nano only when the model status is `AVAILABLE`.
@@ -75,6 +75,14 @@ blocked or quota-limited by AICore.
   distributing the model.
 - Benchmark RAM, startup latency, tokens/second, battery, and thermal behavior
   on a low-end Android device before choosing a model.
+
+The first adapter uses MediaPipe `tasks-genai` because it compiles with the
+project's current Kotlin toolchain. Google marks this API maintenance-only and
+recommends migrating to LiteRT-LM; that migration is blocked until the project
+upgrades to a compatible Kotlin toolchain. The model itself is not checked into
+Git or bundled in the APK. A future model download screen must verify the
+Gemma license/notice, free storage, Wi-Fi consent, checksum, cancellation, and
+resume behavior.
 
 ### Costs that remain
 

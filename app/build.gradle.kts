@@ -91,6 +91,9 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    // Runs a downloaded Gemma .task file on-device. The model is intentionally
+    // not bundled in the APK; OfflineAiRuntime falls back when absent.
+    implementation("com.google.mediapipe:tasks-genai:0.10.27")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

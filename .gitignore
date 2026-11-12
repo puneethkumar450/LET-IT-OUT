@@ -22,3 +22,6 @@ brag-output/
 reel-output/
 tmp/ari-greeting-current.wav
 tmp/preview-*.png
+
+# Large local Gemma model artifacts; models are downloaded to app storage at runtime.
+app/local-models/
